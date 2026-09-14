@@ -1,4 +1,5 @@
 INF1103 Project
+github url: https://github.com/owentan654/INF1103-Team-2.git
 Domain: Healthcare 
 
 Topic: Error logging 
@@ -13,7 +14,6 @@ Use of AI
 Send out alerts; Check up on the machine for any anomalies; Status of the machines; 
 
 Solution:
-
 IO Manager: -Zoey
 - User to input the raw data (error logs [.file format]) into the application (front end).
 
