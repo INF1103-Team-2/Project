@@ -1,0 +1,171 @@
+INF1103 PROJECT
+AI-BASED HEALTHCARE ERROR LOGGING SYSTEM
+Domain: Healthcare
+Topic: Error Logging
+GitHub: https://github.com/INF1103-Team-2/Project.git
+
+01 — PROBLEM:
+    Healthcare machines can generate a large number of error logs during operation. These logs may contain different error codes, machine information, timestamps, and descriptions.
+    Manually reviewing large amounts of error logs can be time-consuming and makes it difficult to quickly identify which issues require attention.
+    Our Goal:
+        To develop an AI-based error logging system that can:
+            Process raw machine error logs
+            Sort and categorize errors
+            Identify potential anomalies
+            Determine error severity
+            Automatically report relevant errors to engineers
+
+02 — TARGET USERS:
+    Hospital Staff
+    Upload and review machine error logs.
+    Engineers
+    Receive notifications about machine errors that require attention.
+    Operators
+    Monitor machine errors and receive relevant updates.
+
+03 — USER INPUT:
+    Raw Machine Error Logs
+    Users upload error log files through the application.
+    The logs may contain:
+    Machine ID
+    Timestamp
+    Error Code
+    Error Description
+    Machine Status
+    Sensor Readings
+    Example
+    2026-09-16 21:30:05 | MACHINE_001 | E102 | Temperature exceeded 90°C
+
+04—OUR SOLUTION:
+IO MANAGER - Zoey
+    Handles user input and file uploads.
+    Upload raw error logs
+    Read and validate files
+    Pass raw data to AI Manager
+
+AI ANALYSIS MANAGER - Jing Jie • Owen
+    Uses AI to process and organize the error logs.
+    Analyze raw logs
+    Extract important information
+    Sort and categorize errors
+    Detect potential anomalies
+    Determine error severity
+    Convert logs into structured data
+
+LOGIC MANAGER - Jia Yi • Naim
+    Determines what action should be taken.
+    Receive processed data
+    Check error severity
+    Apply notification rules
+    Decide when notifications should be sent
+    Send information to Telegram API
+
+DATA MANAGER - Su Bin
+    Stores processed information using JSON files.
+    Store error logs
+    Store machine information
+    Store error details
+    Store severity and notification status
+
+05 — HOW AI IS USED:
+    RAW LOG
+    MACHINE_001 | E102 | Temperature exceeded 90°C
+    ↓
+    AI ANALYSIS
+    The AI identifies:
+    Machine: MACHINE_001
+    Error Code: E102
+    Error Type: Temperature
+    Severity: URGENT
+    ↓
+    STRUCTURED DATA
+    {
+    "machine_id": "MACHINE_001",
+    "error_code": "E102",
+    "error_type": "Temperature",
+    "severity": "URGENT"
+    }
+    The AI focuses on:
+    “What is happening?”
+    The logic manager then determines:
+    “What should we do?”
+06 — TELEGRAM API:
+    The Telegram API is used as our main method of error reporting and notification.
+    After the logic manager processes an error, the system sends the relevant information to a Telegram bot.
+    Example Notification
+    🚨 URGENT MACHINE ERROR
+    Machine: MACHINE_001
+    Error Code: E102
+    Error Type: Temperature
+    Severity: URGENT
+    Temperature exceeded the allowed threshold.
+    Action Required: Immediate inspection.
+    This allows engineers to receive clear and structured information without manually searching through large numbers of error logs.
+
+07 — ERROR SCENARIOS:
+    SCENARIO A — URGENT ERROR
+    When an error is classified as URGENT, the system immediately notifies the engineer.
+    RAW LOG
+    ↓
+    IO MANAGER
+    ↓
+    AI ANALYSIS
+    ↓
+    URGENT ERROR
+    ↓
+    LOGIC MANAGER
+    ↓
+    TELEGRAM API
+    ↓
+    ENGINEER
+    SCENARIO B — NON-URGENT ERROR
+    When an error is classified as NON-URGENT, the system stores the error and delays the notification.
+    The notification will be sent during the designated reporting period, such as after 7:00 AM.
+    RAW LOG
+    ↓
+    IO MANAGER
+    ↓
+    AI ANALYSIS
+    ↓
+    NON-URGENT ERROR
+    ↓
+    STORE / QUEUE
+    ↓
+    AFTER 7:00 AM
+    ↓
+    TELEGRAM API
+    ↓
+    ENGINEER
+
+08 — SYSTEM FLOW:
+    MACHINE ERROR LOGS
+    ↓
+    IO MANAGER
+    The user uploads the raw log.
+    ↓
+    AI MANAGER
+    Sort • Categorise • Analyze • Detect Anomalies
+    ↓
+    LOGIC MANAGER
+    Check Severity • Apply Rules • Decide Notification
+    ↓
+    TELEGRAM API
+    ↓
+    ENGINEER
+    DATA MANAGER
+    Processed information is stored in JSON format throughout the process.
+
+09 — EXPECTED OUTCOME:
+    Our system aims to:
+    Reduce manual error-log processing
+    Organize large amounts of error data
+    Use AI to identify and categorize errors
+    Detect potential machine anomalies
+    Identify error severity
+    Store processed data in JSON
+    Immediately notify engineers about urgent errors
+    Delay non-urgent notifications until the appropriate time
+    Provide engineers with clear and structured error information through Telegram
+KEY IDEA:
+    RAW ERROR LOGS → AI → LOGIC → TELEGRAM → ENGINEER
+    Using AI to understand and organize the errors, logic to decide what happens next, and Telegram to communicate the results.
