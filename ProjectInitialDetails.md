@@ -1,5 +1,5 @@
 INF1103 Project
-github url: https://github.com/owentan654/INF1103-Team-2.git
+github url: https://github.com/INF1103-Team-2/Project.git
 Domain: Healthcare 
 
 Topic: Error logging 
