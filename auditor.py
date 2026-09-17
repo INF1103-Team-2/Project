@@ -16,7 +16,7 @@ while True:
         failed += 1
 
     else:
-        enteredquantity += int(entry)
+        enteredquantity = int(entry)
         inventory = inventory + enteredquantity
 
     if inventory > 500:
