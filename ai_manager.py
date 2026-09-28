@@ -43,30 +43,30 @@ system_instructions = {
 
 #Prompt
 
-#def build_prompt(record: dict) -> str:
-#    """Creating a schema-bound prompt"""
- #   return(
- #       "Assess the following medical device error logs and return your assesment as JSON.\n\n"
- #       f"Machine ID: {record.get('machine_id', 'unknown')}\n"
- #       f"Machine type: {record.get('machine_type', 'unknown')}\n"
-  #      f"Timestamp: {record.get('timestamp', 'unknown')}\n"
-  #      f"Raw error message: {record.get('raw_message', '')}\n\n"
-  #      "Return exactly these keys:\n"
-   #     '  "machine_subsystem": string, the specific component or subsystem at fault\n'
-  #      f'  "severity": integer {severity_min}-{severity_max} '
-  #      "(1 = cosmetic or informational, 3 = degraded function, "
-  #      "5 = device unusable or actively dangerous)\n"
-  #      '  "root_cause_hypothesis": string, one sentence on the most likely cause\n'
-  #      '  "patient_safety_risk": boolean, true only if this fault could directly '
-  #      "harm a patient or produce a clinically misleading reading\n"
-  #      '  "recurrence_indicator": boolean, true if the message itself shows the '
-   #     "fault is repeating (repeat counts, cycling, 'again', multiple occurrences)\n"
-   #     '  "recommended_action": string, the concrete next step for the technician\n'
-  #      f'  "confidence": float {confidence_min}-{confidence_max}, your certainty '
-  #      "in this assessment; be honest and use a low value when the message is "
-  #      "vague or ambiguous\n\n"
-  #      "Respond with the JSON object only."
-  #  )
+def build_prompt(record: dict) -> str:
+    """Creating a schema-bound prompt"""
+    return(
+        "Assess the following medical device error logs and return your assesment as JSON.\n\n"
+        f"Machine ID: {record.get('machine_id', 'unknown')}\n"
+        f"Machine type: {record.get('machine_type', 'unknown')}\n"
+        f"Timestamp: {record.get('timestamp', 'unknown')}\n"
+        f"Raw error message: {record.get('raw_message', '')}\n\n"
+        "Return exactly these keys:\n"
+        '  "machine_subsystem": string, the specific component or subsystem at fault\n'
+        f'  "severity": integer {severity_min}-{severity_max} '
+        "(1 = cosmetic or informational, 3 = degraded function, "
+        "5 = device unusable or actively dangerous)\n"
+        '  "root_cause_hypothesis": string, one sentence on the most likely cause\n'
+        '  "patient_safety_risk": boolean, true only if this fault could directly '
+        "harm a patient or produce a clinically misleading reading\n"
+        '  "recurrence_indicator": boolean, true if the message itself shows the '
+        "fault is repeating (repeat counts, cycling, 'again', multiple occurrences)\n"
+        '  "recommended_action": string, the concrete next step for the technician\n'
+        f'  "confidence": float {confidence_min}-{confidence_max}, your certainty '
+        "in this assessment; be honest and use a low value when the message is "
+        "vague or ambiguous\n\n"
+        "Respond with the JSON object only."
+    )
 
 
 #API call
