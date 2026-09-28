@@ -98,3 +98,64 @@ def next_alert_time(now: datetime, defer_days: int) -> str:
     if target <= now:
         target = target + timedelta(days=1)
     return target.strftime("%Y-%m-%dT%H:%M:%S")
+
+def evaluate(record: dict, now: Optional[datetime] = None) -> dict:
+    """Run all business rules against the AI-enriched record."""
+    if now is None:
+        now = datetime.now()
+    assigned_route = route(record)
+    priority = score(record)
+    defer_days = DEFER_DAYS_BY_ROUTE.get(assigned_route, 2)
+    notify_now = defer_days == 0
+    decision = {
+        "route": assigned_route,
+        "score": priority,
+        "notify_now": notify_now,
+        "scheduled_send_time": now.strftime("%Y-%m-%dT%H:%M:%S") if notify_now
+                               else next_alert_time(now, defer_days),
+        "requires_human_review": assigned_route in (ROUTE_HUMAN_TRIAGE, ROUTE_AI_UNAVAILABLE),
+        "rules_fired": rules_fired(record),
+    }
+    logger.info("Record %s routed to %s with score %d",
+                record.get("log_id"), assigned_route, priority)
+    return decision
+
+def process_record(record: dict, now: Optional[datetime] = None) -> dict:
+    """Attach a decision to an AI-enriched record and return the copy."""
+    processed = dict(record)
+    processed["decision"] = evaluate(record, now=now)
+    return processed
+
+if __name__ == "__main__":
+    import json
+    baseline_time = datetime(2026, 9, 28, 14, 30, 0)
+    critical_sample = {
+        "log_id": "crit-884", "machine_id": "PUMP-402", "machine_type": "infusion_pump",
+        "timestamp": "2026-09-28T14:10:00", "reported_by": "icu_floor_3",
+        "raw_message": "PRIMARY LINE ACCLUSION DELIVER HELD ERR-04",
+        "ai": {
+            "machine_subsystem": "fluid_pump_rotor", "severity": 5,
+            "root_cause_hypothesis": "Physical occlusion or micro-kinking in administration tubing set.",
+            "patient_safety_risk": True, "recurrence_indicator": False,
+            "recommended_action": "Inspect physical lines, clear lines, or swap pump housing assembly.",
+            "confidence": 0.95
+        }
+    }
+    minor_sample = {
+        "log_id": "min-109", "machine_id": "MON-981", "machine_type": "patient_monitor",
+        "timestamp": "2026-09-28T14:12:00", "reported_by": "biomed_audit",
+        "raw_message": "Display screen backlight luminosity down 10 percent.",
+        "ai": {
+            "machine_subsystem": "lcd_panel", "severity": 1,
+            "root_cause_hypothesis": "Aged inverter lamp or diode array deterioration.",
+            "patient_safety_risk": False, "recurrence_indicator": False,
+            "recommended_action": "Flag display unit for upgrade routine during next monthly cycle check.",
+            "confidence": 0.82
+        }
+    }
+    print("=== TRIAGING RECORD 1: CRITICAL SIGNAL ===")
+    res_critical = process_record(critical_sample, now=baseline_time)
+    print(json.dumps(res_critical["decision"], indent=2))
+    print("\n=== TRIAGING RECORD 2: MINOR SIGNAL ===")
+    res_minor = process_record(minor_sample, now=baseline_time)
+    print(json.dumps(res_minor["decision"], indent=2))
