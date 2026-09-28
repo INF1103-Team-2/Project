@@ -2,20 +2,22 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-SEVERITY_WEIGHT = 14
+# --- Scoring weights (0-100 scale) -----------------------------------------
+SEVERITY_WEIGHT = 14          # severity 1-5  -> up to 70
 SAFETY_RISK_BONUS = 20
 RECURRENCE_BONUS = 10
 LOW_CONFIDENCE_PENALTY = 15
 
+# --- Rule thresholds -------------------------------------------------------
 HIGH_SEVERITY = 4
 MODERATE_SEVERITY = 3
 LOW_SEVERITY = 2
 CONFIDENT = 0.7
 LOW_CONFIDENCE = 0.5
 
+# --- Routes ----------------------------------------------------------------
 ROUTE_IMMEDIATE = "immediate_escalation"
 ROUTE_HUMAN_TRIAGE = "human_triage"
 ROUTE_RECURRING = "recurring_fault_review"
@@ -23,6 +25,7 @@ ROUTE_STANDARD = "standard_queue"
 ROUTE_SCHEDULED = "scheduled_maintenance"
 ROUTE_AI_UNAVAILABLE = "ai_unavailable_manual_review"
 
+# How long each route waits before the engineer is alerted.
 DEFER_DAYS_BY_ROUTE = {
     ROUTE_IMMEDIATE: 0,
     ROUTE_HUMAN_TRIAGE: 0,
@@ -31,15 +34,28 @@ DEFER_DAYS_BY_ROUTE = {
     ROUTE_STANDARD: 2,
     ROUTE_SCHEDULED: 5,
 }
-ALERT_HOUR = 7
 
+# Deferred alerts are sent at the start of the working day, never overnight.
+ALERT_HOUR = 7
+REPEAT_OFFENDER_THRESHOLD = 2
+
+
+# ===========================================================================
+# Scoring
+# ===========================================================================
 def score(record: dict) -> int:
-    """Produce a 0-100 priority score from the AI output fields."""
+    """Produce a 0-100 priority score from the AI output fields.
+
+    Used for ranking the work queue. Returns 0 when AI enrichment is absent,
+    since an unassessed record cannot be ranked against assessed ones.
+    """
     ai = record.get("ai")
     if not ai:
         return 0
+
     severity = int(ai.get("severity", 1))
     confidence = float(ai.get("confidence", 0.0))
+
     total = severity * SEVERITY_WEIGHT
     if ai.get("patient_safety_risk"):
         total += SAFETY_RISK_BONUS
@@ -47,17 +63,37 @@ def score(record: dict) -> int:
         total += RECURRENCE_BONUS
     if confidence < LOW_CONFIDENCE:
         total -= LOW_CONFIDENCE_PENALTY
+
     return max(0, min(100, total))
 
+
+# ===========================================================================
+# Routing
+# ===========================================================================
 def route(record: dict) -> str:
-    """Assign the record to an outcome path using the AI assessment."""
+    """Assign the record to an outcome path using the AI assessment.
+
+    Rules are evaluated in priority order; the first match wins.
+
+    R1 (multi-condition): high severity AND a patient safety risk AND the model
+       is confident -> escalate immediately.
+    R2 (multi-condition): high severity BUT low confidence -> do not auto-page
+       an engineer on a guess; send it to a human to triage.
+    R3 (multi-condition): a repeating fault at moderate severity or above ->
+       recurring fault review, because the repeat pattern matters more than any
+       single occurrence.
+    R4 (multi-condition): low severity AND no safety risk -> batch it into
+       scheduled maintenance.
+    """
     ai = record.get("ai")
     if not ai:
         return ROUTE_AI_UNAVAILABLE
+
     severity = int(ai.get("severity", 1))
     confidence = float(ai.get("confidence", 0.0))
     safety_risk = bool(ai.get("patient_safety_risk"))
     recurring = bool(ai.get("recurrence_indicator"))
+
     if severity >= HIGH_SEVERITY and safety_risk and confidence >= CONFIDENT:
         return ROUTE_IMMEDIATE
     if severity >= HIGH_SEVERITY and confidence < CONFIDENT:
@@ -68,15 +104,18 @@ def route(record: dict) -> str:
         return ROUTE_SCHEDULED
     return ROUTE_STANDARD
 
+
 def rules_fired(record: dict) -> list:
     """List the named rules that applied, for auditability in the report."""
     ai = record.get("ai")
     if not ai:
         return ["R0_ai_unavailable"]
+
     severity = int(ai.get("severity", 1))
     confidence = float(ai.get("confidence", 0.0))
     safety_risk = bool(ai.get("patient_safety_risk"))
     recurring = bool(ai.get("recurrence_indicator"))
+
     fired = []
     if severity >= HIGH_SEVERITY and safety_risk and confidence >= CONFIDENT:
         fired.append("R1_confident_high_severity_safety_risk")
@@ -90,8 +129,17 @@ def rules_fired(record: dict) -> list:
         fired.append("R5_confidence_penalty_applied")
     return fired
 
+
+# ===========================================================================
+# Alert scheduling
+# ===========================================================================
 def next_alert_time(now: datetime, defer_days: int) -> str:
-    """Return the ISO timestamp at which a deferred alert should be sent."""
+    """Return the ISO timestamp at which a deferred alert should be sent.
+
+    Deferred alerts land at ALERT_HOUR on the target day, so engineers are
+    never paged overnight for non-urgent faults. Pure function of its inputs,
+    which is what keeps the output identical across runs.
+    """
     target = (now + timedelta(days=defer_days)).replace(
         hour=ALERT_HOUR, minute=0, second=0, microsecond=0
     )
@@ -99,14 +147,24 @@ def next_alert_time(now: datetime, defer_days: int) -> str:
         target = target + timedelta(days=1)
     return target.strftime("%Y-%m-%dT%H:%M:%S")
 
+
+# ===========================================================================
+# Evaluation
+# ===========================================================================
 def evaluate(record: dict, now: Optional[datetime] = None) -> dict:
-    """Run all business rules against the AI-enriched record."""
+    """Run all business rules against the AI-enriched record.
+
+    Returns a decision dict. Deciding whether to alert happens here; actually
+    sending the alert is io_manager's job.
+    """
     if now is None:
         now = datetime.now()
+
     assigned_route = route(record)
     priority = score(record)
     defer_days = DEFER_DAYS_BY_ROUTE.get(assigned_route, 2)
     notify_now = defer_days == 0
+
     decision = {
         "route": assigned_route,
         "score": priority,
@@ -116,9 +174,11 @@ def evaluate(record: dict, now: Optional[datetime] = None) -> dict:
         "requires_human_review": assigned_route in (ROUTE_HUMAN_TRIAGE, ROUTE_AI_UNAVAILABLE),
         "rules_fired": rules_fired(record),
     }
+
     logger.info("Record %s routed to %s with score %d",
                 record.get("log_id"), assigned_route, priority)
     return decision
+
 
 def process_record(record: dict, now: Optional[datetime] = None) -> dict:
     """Attach a decision to an AI-enriched record and return the copy."""
@@ -126,36 +186,60 @@ def process_record(record: dict, now: Optional[datetime] = None) -> dict:
     processed["decision"] = evaluate(record, now=now)
     return processed
 
-if __name__ == "__main__":
-    import json
-    baseline_time = datetime(2026, 9, 28, 14, 30, 0)
-    critical_sample = {
-        "log_id": "crit-884", "machine_id": "PUMP-402", "machine_type": "infusion_pump",
-        "timestamp": "2026-09-28T14:10:00", "reported_by": "icu_floor_3",
-        "raw_message": "PRIMARY LINE ACCLUSION DELIVER HELD ERR-04",
-        "ai": {
-            "machine_subsystem": "fluid_pump_rotor", "severity": 5,
-            "root_cause_hypothesis": "Physical occlusion or micro-kinking in administration tubing set.",
-            "patient_safety_risk": True, "recurrence_indicator": False,
-            "recommended_action": "Inspect physical lines, clear lines, or swap pump housing assembly.",
-            "confidence": 0.95
+
+# ===========================================================================
+# Fleet-level reporting
+# ===========================================================================
+def summarise(records: list) -> dict:
+    """Aggregate stored records into the fleet summary report.
+
+    This is the consolidated view the problem statement asks for: not just
+    per-log alerts, but which machines keep failing.
+    """
+    total = len(records)
+    if total == 0:
+        return {
+            "total": 0,
+            "safety_risk_count": 0,
+            "human_review_count": 0,
+            "mean_score": 0,
+            "by_route": {},
+            "repeat_offenders": [],
         }
+
+    by_route: dict = {}
+    machine_counts: dict = {}
+    safety_risk_count = 0
+    human_review_count = 0
+    score_total = 0
+
+    for record in records:
+        ai = record.get("ai") or {}
+        decision = record.get("decision") or {}
+
+        route_name = decision.get("route", "unrouted")
+        by_route[route_name] = by_route.get(route_name, 0) + 1
+
+        machine_id = record.get("machine_id", "unknown")
+        machine_counts[machine_id] = machine_counts.get(machine_id, 0) + 1
+
+        if ai.get("patient_safety_risk"):
+            safety_risk_count += 1
+        if decision.get("requires_human_review"):
+            human_review_count += 1
+        score_total += int(decision.get("score", 0))
+
+    repeat_offenders = sorted(
+        [(machine, count) for machine, count in machine_counts.items()
+         if count >= REPEAT_OFFENDER_THRESHOLD],
+        key=lambda pair: (-pair[1], pair[0]),
+    )
+
+    return {
+        "total": total,
+        "safety_risk_count": safety_risk_count,
+        "human_review_count": human_review_count,
+        "mean_score": round(score_total / total, 1),
+        "by_route": by_route,
+        "repeat_offenders": repeat_offenders,
     }
-    minor_sample = {
-        "log_id": "min-109", "machine_id": "MON-981", "machine_type": "patient_monitor",
-        "timestamp": "2026-09-28T14:12:00", "reported_by": "biomed_audit",
-        "raw_message": "Display screen backlight luminosity down 10 percent.",
-        "ai": {
-            "machine_subsystem": "lcd_panel", "severity": 1,
-            "root_cause_hypothesis": "Aged inverter lamp or diode array deterioration.",
-            "patient_safety_risk": False, "recurrence_indicator": False,
-            "recommended_action": "Flag display unit for upgrade routine during next monthly cycle check.",
-            "confidence": 0.82
-        }
-    }
-    print("=== TRIAGING RECORD 1: CRITICAL SIGNAL ===")
-    res_critical = process_record(critical_sample, now=baseline_time)
-    print(json.dumps(res_critical["decision"], indent=2))
-    print("\n=== TRIAGING RECORD 2: MINOR SIGNAL ===")
-    res_minor = process_record(minor_sample, now=baseline_time)
-    print(json.dumps(res_minor["decision"], indent=2))
