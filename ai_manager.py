@@ -12,10 +12,10 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Configuration settings
+    # Configuration settings
 AI_BASE_URL = os.getenv(
-    "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"
-).rstrip("/")
+        "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"
+    ).rstrip("/")
 AI_MODEL = os.getenv("AI_MODEL", "gemini-2.0-flash")
 AI_API_KEY = os.getenv("AI_API_KEY", "").strip()
 
@@ -35,13 +35,13 @@ Response_Schema = {
     "recurrence_indicator": bool,
     "recommended action": str,
     "confidence": float,
-}
+    }
 
 system_instructions = {
     ""
-}
+    }
 
-#Prompt
+    #Prompt
 
 def build_prompt(record: dict) -> str:
     """Creating a schema-bound prompt"""
@@ -69,7 +69,7 @@ def build_prompt(record: dict) -> str:
     )
 
 
-#API call
+    #API call
 
 def call_api(prompt: str) -> Optional[str]:
     """Send prompt to Gemini via the OpenAI-compatible endpoint"""
@@ -87,13 +87,13 @@ def call_api(prompt: str) -> Optional[str]:
             {
                 "role": "system",
                 "content": (
-                    "You are an expert equipment engineer. "
-                    "Respond ONLY with valid JSON matching the requested keys."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ],
-    }
+                "You are an expert equipment engineer. "
+                "Respond ONLY with valid JSON matching the requested keys."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+        }
     headers = {
         "Authorization": f"Bearer {AI_API_KEY}",
         "Content-Type": "application/json",
@@ -109,20 +109,20 @@ def call_api(prompt: str) -> Optional[str]:
         return None
 
 
-#if __name__ == "__main__":
-    user_issue = input("Enter device error description or machine log: ")
+if __name__ == "__main__":
+        record = {
+        "machine_id": "MACHINE_001",
+        "machine_type": "Infusion Pump",
+        "timestamp": "2026-10-03 21:30:05",
+        "raw_message": "Temperature exceeded 90°C"
+    }
 
-    if user_issue.strip():
+if record:
         print("\nSending prompt to Gemini API...")
-        prompt = build_prompt(user_issue)
+        prompt = build_prompt(record)
         raw_response = call_api(prompt)
 
         print("\n--- AI Raw JSON Response ---")
         print(raw_response)
-    else:
+else:
         print("No input provided.")
-
-
-result = call_api("Return exactly: {\"test\": true}")
-
-print(result)
