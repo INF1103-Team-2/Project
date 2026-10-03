@@ -22,10 +22,10 @@ AI_API_KEY = os.getenv("AI_API_KEY", "").strip()
 max_attempts = 3
 retry_backoff_seconds = 2
 
-severity_min = 1
-severity_max = 5
-confidence_min = 0.0
-confidence_max = 1.0
+SEVERITY_MIN = 1
+SEVERITY_MAX = 5
+CONFIDENCE_MIN = 0.0
+CONFIDENCE_MAX = 1.0
 
 Response_Schema = {
     "machine_subsystem": str,
@@ -139,3 +139,43 @@ def parse_response(raw: Optional[str]) -> Optional[dict]:
         logger.error("AI response parsed to %s, expected an object", type(parsed).__name__)
         return None
     return parsed
+
+#------------------------------------------------------------
+#Validate response so that bad data doesn't reach data_manager
+#------------------------------------------------------------
+def validate_response(data: Optional[dict]) -> bool:
+    if not isinstance(data, dict):
+        logger.error("Validation failed: response is not a dictionary.")
+        return False
+
+    for key, expected_type in Response_Schema.items():
+        if key not in data:
+            logger.error("Validation failed: missing required key '%s'", key)
+            return False
+
+        value = data[key]
+
+        if expected_type is bool:
+            if not isinstance(value, bool):
+                logger.error("Validation failed: '%s' must be a boolean, got %r", key, value)
+                return False
+        elif expected_type is int:
+            if isinstance(value, bool) or not isinstance(value, int):
+                logger.error("Validation failed: '%s' must be a integer, got %r", key, value)
+                return False
+        elif expected_type is float:
+            if isinstance(value, bool):
+                logger.error("Validation failed: '%s' must be a number, got %r", key, value)
+                return False
+        elif expected_type is str:
+            if not isinstance(value, str) or not value.strip():
+                logger.error("Validation failed: '%s' must be a non-empty string", key)
+                return False
+
+        severity = data["severity"]
+        if not SEVERITY_MAX >= severity >= SEVERITY_MIN:
+            logger.error("Validation failed: severity %s outside %d-%d",
+                         severity, SEVERITY_MIN, SEVERITY_MAX)
+            return False
+
+        return True
