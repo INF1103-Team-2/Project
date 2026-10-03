@@ -123,6 +123,6 @@ def call_api(prompt: str) -> Optional[str]:
         print("No input provided.")
 
 
-result = call_api("Return exactly: {\"test\": true}")
+#result = call_api("Return exactly: {\"test\": true}")
 
-print(result)
+#print(result)
