@@ -19,8 +19,8 @@ AI_BASE_URL = os.getenv(
 AI_MODEL = os.getenv("AI_MODEL", "gemini-2.0-flash")
 AI_API_KEY = os.getenv("AI_API_KEY", "").strip()
 
-max_attempts = 3
-retry_backoff_seconds = 2
+MAX_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = 2
 
 SEVERITY_MIN = 1
 SEVERITY_MAX = 5
@@ -54,7 +54,7 @@ def build_prompt(record: dict) -> str:
         f"Raw error message: {record.get('raw_message', '')}\n\n"
         "Return exactly these keys:\n"
         '  "machine_subsystem": string, the specific component or subsystem at fault\n'
-        f'  "severity": integer {severity_min}-{severity_max} '
+        f'  "severity": integer {SEVERITY_MIN}-{SEVERITY_MAX} '
         "(1 = cosmetic or informational, 3 = degraded function, "
         "5 = device unusable or actively dangerous)\n"
         '  "root_cause_hypothesis": string, one sentence on the most likely cause\n'
@@ -63,7 +63,7 @@ def build_prompt(record: dict) -> str:
         '  "recurrence_indicator": boolean, true if the message itself shows the '
         "fault is repeating (repeat counts, cycling, 'again', multiple occurrences)\n"
         '  "recommended_action": string, the concrete next step for the technician\n'
-        f'  "confidence": float {confidence_min}-{confidence_max}, your certainty '
+        f'  "confidence": float {CONFIDENCE_MIN}-{CONFIDENCE_MAX}, your certainty '
         "in this assessment; be honest and use a low value when the message is "
         "vague or ambiguous\n\n"
         "Respond with the JSON object only."
@@ -181,15 +181,57 @@ def validate_response(data: Optional[dict]) -> bool:
         return True
 
 #------------------------------------------------------------
-#Return a copy of the validated responeses with right type
+#Build a clean copy and return it 
 #------------------------------------------------------------
-    def normalize_report(data: dict) -> dict:
-        return {
-            "machine_subsystem": data["machine_subsystem"].strip(),
-            "severity": int(data["severity"]),
-            "root_cause_hypothesis": data["root_cause_hypothesis"].strip(),
-            "patient_safety_risk": bool(data["patient_safety_risk"]),
-            "recurrence_indicator": bool(data["recurrence_indicator"]),
-            "recommended_action": data["recommended_action"].strip(),
-            "confidence": round(float(data["condidence"]), 2),
+def normalize_response(data: dict) -> dict:
+    return {
+        "machine_subsystem": data["machine_subsystem"].strip(),
+        "severity": int(data["severity"]),
+        "root_cause_hypothesis": data["root_cause_hypothesis"].strip(),
+        "patient_safety_risk": bool(data["patient_safety_risk"]),
+        "recurrence_indicator": bool(data["recurrence_indicator"]),
+        "recommended_action": data["recommended_action"].strip(),
+        "confidence": round(float(data["condidence"]), 2),
         }
+
+#------------------------------------------------------------
+#Returns a copy of either the AI results or an error
+#------------------------------------------------------------
+def enrich_record(record: dict) -> dict:
+    enriched = dict(record)
+
+    if not AI_API_KEY:
+        enriched["ai"] = None
+        enriched["ai_error"] = "AI_API_KEY is not configured"
+        logger.error("Record %s not enriched: AI_API_KEY is not configured",
+                     record.get("log_id"))
+        return enriched
+
+    prompt = build_prompt(record)
+    last_error = "unknown failure"
+
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        raw = call_api(prompt)
+        if raw is None:
+            last_error = "AI API unreachable or returned an error"
+        else:
+            parsed = parse_response(raw)
+            if parsed is None:
+                last_error = "AI response could not be parsed as JSON"
+            elif not validate_response(parsed):
+                last_error = "AI response failed schema validation"
+            else:
+                enriched["ai"] = normalize_response(parsed)
+                enriched.pop("ai_error", None)
+                logger.info("Record %s enriched on attempt %d",
+                            record.get("log_id"), attempt)
+                return enriched
+        logger.warning("Attempt %d/%d failed for record %s: %s",
+                       attempt, MAX_ATTEMPTS, record.get("log_id"), last_error)
+        if attempt < MAX_ATTEMPTS:
+            time.sleep(RETRY_BACKOFF_SECONDS * attempt)
+
+    enriched["ai"] = None
+    enriched["ai_error"] = last_error
+    logger.error("Record %s could not be enriched: %s", record.get("log_id", last_error))
+    return enriched
