@@ -1,10 +1,10 @@
-import json
-import logging
-import os
+import json #parses model's replies
+import logging #logging of errors and warnings so no need to print
+import os #reads enviroment variables
 import time
-from typing import Any, Optional
+from typing import Optional
 
-import requests
+import requests #HTTP calls
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -41,8 +41,9 @@ system_instructions = {
     ""
 }
 
+#------------------------------------------------------------
 #Prompt
-
+#------------------------------------------------------------
 def build_prompt(record: dict) -> str:
     """Creating a schema-bound prompt"""
     return(
@@ -68,9 +69,9 @@ def build_prompt(record: dict) -> str:
         "Respond with the JSON object only."
     )
 
-
+#------------------------------------------------------------
 #API call
-
+#------------------------------------------------------------
 def call_api(prompt: str) -> Optional[str]:
     """Send prompt to Gemini via the OpenAI-compatible endpoint"""
     """Catches errors and returns None instead of letting the program crash"""
@@ -106,23 +107,35 @@ def call_api(prompt: str) -> Optional[str]:
         return body["choices"][0]["message"]["content"]
     except requests.RequestException as e:
         logger.error("API call failed: %s", e)
+        return None 
+
+#------------------------------------------------------------
+#Breaking down the response to Python dictionary
+#------------------------------------------------------------
+def parse_response(raw: Optional[str]) -> Optional[dict]:
+    if not raw or not isinstance(raw, str):
+        logger.error("Nothing to parse from the AI response.")
         return None
 
+    text = raw.strip()
+    if text.startswith("'''"):
+        text = text.strip("'")
+        if text.lower().startswith("json"):
+            text = text[4:]
+        text = text.strip()
 
-#if __name__ == "__main__":
-    user_issue = input("Enter device error description or machine log: ")
+    start = text.find("{")
+    end = text.rfind("}") #reverse find
+    if start == -1 or end == -1 or end < start:
+        logger.error("No JSON object found in the AI response: %r",raw[:120])
+        return None
 
-    if user_issue.strip():
-        print("\nSending prompt to Gemini API...")
-        prompt = build_prompt(user_issue)
-        raw_response = call_api(prompt)
-
-        print("\n--- AI Raw JSON Response ---")
-        print(raw_response)
-    else:
-        print("No input provided.")
-
-
-#result = call_api("Return exactly: {\"test\": true}")
-
-#print(result)
+    try:
+        parsed = json.loads(text[start:end +1])
+    except json.JSONDecodeRorror as error:
+        logger.error("AI response was not a valid JSON value: %s", error)
+        return None
+    if not isinstance(parsed, dict):
+        logger.error("AI response parsed to %s, expected an object", type(parsed).__name__)
+        return None
+    return parsed
