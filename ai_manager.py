@@ -179,3 +179,17 @@ def validate_response(data: Optional[dict]) -> bool:
             return False
 
         return True
+
+#------------------------------------------------------------
+#Return a copy of the validated responeses with right type
+#------------------------------------------------------------
+    def normalize_report(data: dict) -> dict:
+        return {
+            "machine_subsystem": data["machine_subsystem"].strip(),
+            "severity": int(data["severity"]),
+            "root_cause_hypothesis": data["root_cause_hypothesis"].strip(),
+            "patient_safety_risk": bool(data["patient_safety_risk"]),
+            "recurrence_indicator": bool(data["recurrence_indicator"]),
+            "recommended_action": data["recommended_action"].strip(),
+            "confidence": round(float(data["condidence"]), 2),
+        }
