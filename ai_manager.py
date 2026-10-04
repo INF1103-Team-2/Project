@@ -34,7 +34,7 @@ Response_Schema = {
     "root_cause_hypothesis": str,
     "patient_safety_risk": bool,
     "recurrence_indicator": bool,
-    "recommended action": str,
+    "recommended_action": str,
     "confidence": float,
     }
 
