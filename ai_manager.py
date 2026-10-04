@@ -37,11 +37,6 @@ response_schema = {
     "confidence": float,
 }
 
-<<<<<<< HEAD
-system_instructions = {
-    ""
-}
-
 #------------------------------------------------------------
 #Prompt
 #------------------------------------------------------------
@@ -173,7 +168,7 @@ def parse_response(raw: Optional[str]) -> Optional[dict]:
 
     try:
         parsed = json.loads(text[start:end +1])
-    except json.JSONDecodeRorror as error:
+    except json.JSONDecodeError as error:
         logger.error("AI response was not a valid JSON value: %s", error)
         return None
     if not isinstance(parsed, dict):
@@ -189,7 +184,7 @@ def validate_response(data: Optional[dict]) -> bool:
         logger.error("Validation failed: response is not a dictionary.")
         return False
 
-    for key, expected_type in Response_Schema.items():
+    for key, expected_type in response_schema.items():
         if key not in data:
             logger.error("Validation failed: missing required key '%s'", key)
             return False
@@ -213,13 +208,17 @@ def validate_response(data: Optional[dict]) -> bool:
                 logger.error("Validation failed: '%s' must be a non-empty string", key)
                 return False
 
-        severity = data["severity"]
-        if not SEVERITY_MAX >= severity >= SEVERITY_MIN:
-            logger.error("Validation failed: severity %s outside %d-%d",
-                         severity, SEVERITY_MIN, SEVERITY_MAX)
-            return False
-
-        return True
+    severity = data["severity"]
+    if not SEVERITY_MAX >= severity >= SEVERITY_MIN:
+        logger.error("Validation failed: severity %s outside %d-%d",
+                     severity, SEVERITY_MIN, SEVERITY_MAX)
+        return False
+    confidence = data["confidence"]
+    if not CONFIDENCE_MIN <= confidence <= CONFIDENCE_MAX:
+        logger.error("Validation failed: confidence %s outside %.1f-%.1f",
+                     confidence, CONFIDENCE_MIN, CONFIDENCE_MAX)
+        return False
+    return True
 
 #------------------------------------------------------------
 #Build a clean copy and return it 
@@ -232,7 +231,7 @@ def normalize_response(data: dict) -> dict:
         "patient_safety_risk": bool(data["patient_safety_risk"]),
         "recurrence_indicator": bool(data["recurrence_indicator"]),
         "recommended_action": data["recommended_action"].strip(),
-        "confidence": round(float(data["condidence"]), 2),
+        "confidence": round(float(data["confidence"]), 2),
         }
 
 #------------------------------------------------------------
@@ -276,45 +275,17 @@ def enrich_record(record: dict) -> dict:
     enriched["ai_error"] = last_error
     logger.error("Record %s could not be enriched: %s", record.get("log_id", last_error))
     return enriched
-=======
-    response = None
-    
-    for attempt in range(MAX_ATTEMPTS):
-        try:
-            response = requests.post(url, json=payload, headers=headers, timeout=30)
-            response.raise_for_status()
-            body = response.json() # Convert the API response from JSON into Python data
-            content = body["choices"][0]["message"]["content"]
-            validated_data = validate_ai_response(content)
-            return validated_data
-        except requests.RequestException as e:
-            logger.error("API call failed: %s", e)
 
-            if response is not None and response.status_code == 429:
-                logger.warning("API rate limit exceeded. Stopping retries.")
-                return None
-
-            if response is not None:
-                print("API response:", response.text)
-
-        time.sleep(RETRY_BACKOFF_SECONDS)
-
-    return None
 if __name__ == "__main__":
     record = {
         "machine_id": "MACHINE_001",
         "machine_type": "Infusion Pump",
         "timestamp": "2026-10-03 21:30:05",
-        "raw_message": "Sensor reading abnormal"
+        "raw_message": "Temperature exceeded 90°C"
     }
 
-    if record:
-        print("\nSending prompt to AI API...") 
-        prompt = build_prompt(record)
-        raw_response = call_api(prompt)
+    result = enrich_record(record)
 
-        print("\n--- AI Raw JSON Response ---")
-        print(raw_response)
-    else:
-        print("No input provided.")
->>>>>>> 4c0ad6eaeafb942137f704d569806b526ee2e6a2
+    print("\n--- AI Analysis Result ---")
+    print(result)
+    
