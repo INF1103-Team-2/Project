@@ -1,0 +1,8 @@
+.env
+__pycache__/
+*.pyc
+logs/
+data/processed_records.json
+.venv/
+venv/
+.DS_Store
