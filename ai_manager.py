@@ -35,7 +35,7 @@ response_schema = {
     "recurrence_indicator": bool,
     "recommended_action": str,
     "confidence": float,
-    }
+}
 
 # Prompt
 
@@ -84,9 +84,9 @@ def call_api(prompt: str) -> Optional[str]:
             {
                 "role": "system",
                 "content": (
-                "You are an expert equipment engineer. "
-                "Respond ONLY with valid JSON matching the requested keys."
-                    ),
+                    "You are an expert equipment engineer. "
+                    "Respond ONLY with valid JSON matching the requested keys."
+                ),
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     }
 
     if record:
-        print("\nSending prompt to Gemini API...")
+        print("\nSending prompt to AI API...") 
         prompt = build_prompt(record)
         raw_response = call_api(prompt)
 
