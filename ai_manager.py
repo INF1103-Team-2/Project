@@ -3,6 +3,7 @@ import logging
 import os
 import time
 from typing import Any, Optional
+from wsgiref import headers
 
 import requests
 from dotenv import load_dotenv
@@ -12,10 +13,10 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-    # Configuration settings
+# Configuration settings
 AI_BASE_URL = os.getenv(
         "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"
-    ).rstrip("/")
+).rstrip("/")
 AI_MODEL = os.getenv("AI_MODEL", "gemini-2.0-flash")
 AI_API_KEY = os.getenv("AI_API_KEY", "").strip()
 
@@ -41,7 +42,7 @@ system_instructions = {
     ""
     }
 
-    #Prompt
+#Prompt
 
 def build_prompt(record: dict) -> str:
     """Creating a schema-bound prompt"""
@@ -67,7 +68,6 @@ def build_prompt(record: dict) -> str:
         "vague or ambiguous\n\n"
         "Respond with the JSON object only."
     )
-
 
     #API call
 
@@ -99,30 +99,35 @@ def call_api(prompt: str) -> Optional[str]:
         "Content-Type": "application/json",
     }
 
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-        response.raise_for_status()
-        body = response.json()
-        return body["choices"][0]["message"]["content"]
-    except requests.RequestException as e:
-        logger.error("API call failed: %s", e)
-        return None
-
+    response = None
+    
+    for attempt in range(max_attempts):
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            response.raise_for_status()
+            body = response.json()
+            return body["choices"][0]["message"]["content"]
+        except requests.RequestException as e:
+            logger.error("API call failed: %s", e)
+            if response is not None:
+                print("API response:", response.text)
+            time.sleep(retry_backoff_seconds)
+    return None
 
 if __name__ == "__main__":
-        record = {
+    record = {
         "machine_id": "MACHINE_001",
         "machine_type": "Infusion Pump",
         "timestamp": "2026-10-03 21:30:05",
-        "raw_message": "Temperature exceeded 90°C"
+        "raw_message": "Sensor reading abnormal"
     }
 
-if record:
+    if record:
         print("\nSending prompt to Gemini API...")
         prompt = build_prompt(record)
         raw_response = call_api(prompt)
 
         print("\n--- AI Raw JSON Response ---")
         print(raw_response)
-else:
+    else:
         print("No input provided.")
