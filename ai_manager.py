@@ -27,18 +27,14 @@ SEVERITY_MAX = 5
 CONFIDENCE_MIN = 0.0
 CONFIDENCE_MAX = 1.0
 
-Response_Schema = {
+response_schema = {
     "machine_subsystem": str,
     "severity": int,
     "root_cause_hypothesis": str,
     "patient_safety_risk": bool,
     "recurrence_indicator": bool,
-    "recommended action": str,
+    "recommended_action": str,
     "confidence": float,
-}
-
-system_instructions = {
-    ""
 }
 
 #------------------------------------------------------------
@@ -132,7 +128,7 @@ def parse_response(raw: Optional[str]) -> Optional[dict]:
 
     try:
         parsed = json.loads(text[start:end +1])
-    except json.JSONDecodeRorror as error:
+    except json.JSONDecodeError as error:
         logger.error("AI response was not a valid JSON value: %s", error)
         return None
     if not isinstance(parsed, dict):
@@ -148,7 +144,7 @@ def validate_response(data: Optional[dict]) -> bool:
         logger.error("Validation failed: response is not a dictionary.")
         return False
 
-    for key, expected_type in Response_Schema.items():
+    for key, expected_type in response_schema.items():
         if key not in data:
             logger.error("Validation failed: missing required key '%s'", key)
             return False
@@ -172,13 +168,17 @@ def validate_response(data: Optional[dict]) -> bool:
                 logger.error("Validation failed: '%s' must be a non-empty string", key)
                 return False
 
-        severity = data["severity"]
-        if not SEVERITY_MAX >= severity >= SEVERITY_MIN:
-            logger.error("Validation failed: severity %s outside %d-%d",
-                         severity, SEVERITY_MIN, SEVERITY_MAX)
-            return False
-
-        return True
+    severity = data["severity"]
+    if not SEVERITY_MAX >= severity >= SEVERITY_MIN:
+        logger.error("Validation failed: severity %s outside %d-%d",
+                     severity, SEVERITY_MIN, SEVERITY_MAX)
+        return False
+    confidence = data["confidence"]
+    if not CONFIDENCE_MIN <= confidence <= CONFIDENCE_MAX:
+        logger.error("Validation failed: confidence %s outside %.1f-%.1f",
+                     confidence, CONFIDENCE_MIN, CONFIDENCE_MAX)
+        return False
+    return True
 
 #------------------------------------------------------------
 #Build a clean copy and return it 
@@ -191,7 +191,7 @@ def normalize_response(data: dict) -> dict:
         "patient_safety_risk": bool(data["patient_safety_risk"]),
         "recurrence_indicator": bool(data["recurrence_indicator"]),
         "recommended_action": data["recommended_action"].strip(),
-        "confidence": round(float(data["condidence"]), 2),
+        "confidence": round(float(data["confidence"]), 2),
         }
 
 #------------------------------------------------------------
@@ -235,3 +235,17 @@ def enrich_record(record: dict) -> dict:
     enriched["ai_error"] = last_error
     logger.error("Record %s could not be enriched: %s", record.get("log_id", last_error))
     return enriched
+
+if __name__ == "__main__":
+    record = {
+        "machine_id": "MACHINE_001",
+        "machine_type": "Infusion Pump",
+        "timestamp": "2026-10-03 21:30:05",
+        "raw_message": "Temperature exceeded 90°C"
+    }
+
+    result = enrich_record(record)
+
+    print("\n--- AI Analysis Result ---")
+    print(result)
+    
