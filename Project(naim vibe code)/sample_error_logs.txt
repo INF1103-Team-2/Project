@@ -1,0 +1,13 @@
+# timestamp | machine_id | machine_type | error message
+2026-09-14T03:12:44 | PUMP-114 | infusion_pump | Downstream occlusion alarm triggered 6 times in 20 minutes; pressure reading 412 mmHg above baseline, delivery halted mid-infusion
+2026-09-14T04:01:02 | MON-007 | patient_monitor | SpO2 waveform intermittently flat for 3-5 seconds then recovers; no probe disconnect logged
+2026-09-14T06:48:19 | VENT-021 | ventilator | Inspiratory valve failed self-test on startup, unit reverted to backup valve and continued operating
+2026-09-14T07:15:00 | STER-003 | sterilisation_unit | Cycle log rotation completed, archive written to internal storage
+2026-09-14T09:33:51 | PUMP-114 | infusion_pump | Occlusion alarm again, fourth time today; technician cleared without recalibration
+2026-09-14T11:02:10 | IMG-002 | imaging_system | Gantry rotation encoder reported a 0.3 degree position mismatch during calibration sweep
+2026-09-14T13:27:38 | DIA-009 | dialysis_machine | Conductivity sensor drifted outside tolerance for 90 seconds, alarm acknowledged, treatment continued
+2026-09-14T15:44:05 | MON-007 | patient_monitor | Display backlight flickered then went dark for 8 seconds, recovered on its own
+2026-09-14T18:09:27 | VENT-021 | ventilator | Unexpected condition
+2026-09-15T02:55:13 | PUMP-088 | infusion_pump | Battery health check reported capacity at 71 percent of rated value
+BADLINE without any separators at all
+2026-15-99T99:99:99 | PUMP-088 | infusion_pump | Deliberately broken timestamp to prove malformed lines are skipped
