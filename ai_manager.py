@@ -64,9 +64,34 @@ def build_prompt(record: dict) -> str:
         "Respond with the JSON object only."
     )
 
+# Ai response validation
+
+def validate_ai_response(content: str) -> Optional[dict]:
+    """Validate and return the AI JSON response."""
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        logger.error("AI returned invalid JSON.")
+        return None
+
+    for key in response_schema:
+        if key not in data:
+            logger.error("AI response is missing key: %s", key)
+            return None
+
+    if not isinstance(data["severity"], int) or not 1 <= data["severity"] <= 5:
+        logger.error("Invalid severity value.")
+        return None
+
+    if not 0 <= data["confidence"] <= 1:
+        logger.error("Invalid confidence value.")
+        return None
+
+    return data
+
 # API call
 
-def call_api(prompt: str) -> Optional[str]:
+def call_api(prompt: str) -> Optional[dict]:
     """Send a prompt to Gemini and return the JSON response as text.
     Returns None if the API request fails.
     """
@@ -104,7 +129,8 @@ def call_api(prompt: str) -> Optional[str]:
             response.raise_for_status()
             body = response.json() # Convert the API response from JSON into Python data
             content = body["choices"][0]["message"]["content"]
-            return content
+            validated_data = validate_ai_response(content)
+            return validated_data
         except requests.RequestException as e:
             logger.error("API call failed: %s", e)
 
