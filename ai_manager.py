@@ -12,7 +12,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Configuration settings
+# AI API configuration
 AI_BASE_URL = os.getenv(
     "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"
 ).rstrip("/")
@@ -27,16 +27,17 @@ SEVERITY_MAX = 5
 CONFIDENCE_MIN = 0.0
 CONFIDENCE_MAX = 1.0
 
-Response_Schema = {
+response_schema = {
     "machine_subsystem": str,
     "severity": int,
     "root_cause_hypothesis": str,
     "patient_safety_risk": bool,
     "recurrence_indicator": bool,
-    "recommended action": str,
+    "recommended_action": str,
     "confidence": float,
 }
 
+<<<<<<< HEAD
 system_instructions = {
     ""
 }
@@ -44,10 +45,14 @@ system_instructions = {
 #------------------------------------------------------------
 #Prompt
 #------------------------------------------------------------
+=======
+# Prompt
+
+>>>>>>> 4c0ad6eaeafb942137f704d569806b526ee2e6a2
 def build_prompt(record: dict) -> str:
-    """Creating a schema-bound prompt"""
-    return(
-        "Assess the following medical device error logs and return your assesment as JSON.\n\n"
+    """Build a prompt for structured AI analysis of an error log."""
+    return (
+        "Assess the following medical device error logs and return your assessment as JSON.\n\n"
         f"Machine ID: {record.get('machine_id', 'unknown')}\n"
         f"Machine type: {record.get('machine_type', 'unknown')}\n"
         f"Timestamp: {record.get('timestamp', 'unknown')}\n"
@@ -69,12 +74,47 @@ def build_prompt(record: dict) -> str:
         "Respond with the JSON object only."
     )
 
+<<<<<<< HEAD
 #------------------------------------------------------------
 #API call
 #------------------------------------------------------------
 def call_api(prompt: str) -> Optional[str]:
     """Send prompt to Gemini via the OpenAI-compatible endpoint"""
     """Catches errors and returns None instead of letting the program crash"""
+=======
+# Ai response validation
+
+def validate_ai_response(content: str) -> Optional[dict]:
+    """Validate and return the AI JSON response."""
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        logger.error("AI returned invalid JSON.")
+        return None
+
+    for key in response_schema:
+        if key not in data:
+            logger.error("AI response is missing key: %s", key)
+            return None
+
+    if not isinstance(data["severity"], int) or not 1 <= data["severity"] <= 5:
+        logger.error("Invalid severity value.")
+        return None
+
+    if not 0 <= data["confidence"] <= 1:
+        logger.error("Invalid confidence value.")
+        return None
+
+    return data
+
+# API call
+
+def call_api(prompt: str) -> Optional[dict]:
+    """Send a prompt to Gemini and return the JSON response as text.
+    Returns None if the API request fails.
+    """
+
+>>>>>>> 4c0ad6eaeafb942137f704d569806b526ee2e6a2
     if not AI_API_KEY:
         logger.error("AI_API_KEY is not set in .env file.")
         return None
@@ -91,15 +131,16 @@ def call_api(prompt: str) -> Optional[str]:
                     "You are an expert equipment engineer. "
                     "Respond ONLY with valid JSON matching the requested keys."
                 ),
-            },
-            {"role": "user", "content": prompt},
-        ],
-    }
+                },
+                {"role": "user", "content": prompt},
+            ],
+        }
     headers = {
         "Authorization": f"Bearer {AI_API_KEY}",
         "Content-Type": "application/json",
     }
 
+<<<<<<< HEAD
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=30)
         response.raise_for_status()
@@ -235,3 +276,45 @@ def enrich_record(record: dict) -> dict:
     enriched["ai_error"] = last_error
     logger.error("Record %s could not be enriched: %s", record.get("log_id", last_error))
     return enriched
+=======
+    response = None
+    
+    for attempt in range(MAX_ATTEMPTS):
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            response.raise_for_status()
+            body = response.json() # Convert the API response from JSON into Python data
+            content = body["choices"][0]["message"]["content"]
+            validated_data = validate_ai_response(content)
+            return validated_data
+        except requests.RequestException as e:
+            logger.error("API call failed: %s", e)
+
+            if response is not None and response.status_code == 429:
+                logger.warning("API rate limit exceeded. Stopping retries.")
+                return None
+
+            if response is not None:
+                print("API response:", response.text)
+
+        time.sleep(RETRY_BACKOFF_SECONDS)
+
+    return None
+if __name__ == "__main__":
+    record = {
+        "machine_id": "MACHINE_001",
+        "machine_type": "Infusion Pump",
+        "timestamp": "2026-10-03 21:30:05",
+        "raw_message": "Sensor reading abnormal"
+    }
+
+    if record:
+        print("\nSending prompt to AI API...") 
+        prompt = build_prompt(record)
+        raw_response = call_api(prompt)
+
+        print("\n--- AI Raw JSON Response ---")
+        print(raw_response)
+    else:
+        print("No input provided.")
+>>>>>>> 4c0ad6eaeafb942137f704d569806b526ee2e6a2
