@@ -40,10 +40,6 @@ response_schema = {
 #------------------------------------------------------------
 #Prompt
 #------------------------------------------------------------
-=======
-# Prompt
-
->>>>>>> 4c0ad6eaeafb942137f704d569806b526ee2e6a2
 def build_prompt(record: dict) -> str:
     """Build a prompt for structured AI analysis of an error log."""
     return (
@@ -69,14 +65,6 @@ def build_prompt(record: dict) -> str:
         "Respond with the JSON object only."
     )
 
-<<<<<<< HEAD
-#------------------------------------------------------------
-#API call
-#------------------------------------------------------------
-def call_api(prompt: str) -> Optional[str]:
-    """Send prompt to Gemini via the OpenAI-compatible endpoint"""
-    """Catches errors and returns None instead of letting the program crash"""
-=======
 # Ai response validation
 
 def validate_ai_response(content: str) -> Optional[dict]:
@@ -109,7 +97,6 @@ def call_api(prompt: str) -> Optional[dict]:
     Returns None if the API request fails.
     """
 
->>>>>>> 4c0ad6eaeafb942137f704d569806b526ee2e6a2
     if not AI_API_KEY:
         logger.error("AI_API_KEY is not set in .env file.")
         return None
@@ -135,7 +122,6 @@ def call_api(prompt: str) -> Optional[dict]:
         "Content-Type": "application/json",
     }
 
-<<<<<<< HEAD
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=30)
         response.raise_for_status()
