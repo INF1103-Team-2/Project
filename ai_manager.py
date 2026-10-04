@@ -2,8 +2,7 @@ import json
 import logging
 import os
 import time
-from typing import Any, Optional
-from wsgiref import headers
+from typing import Optional
 
 import requests
 from dotenv import load_dotenv
@@ -13,22 +12,22 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Configuration settings
+# AI API configuration
 AI_BASE_URL = os.getenv(
-        "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"
+    "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"
 ).rstrip("/")
 AI_MODEL = os.getenv("AI_MODEL", "gemini-2.0-flash")
 AI_API_KEY = os.getenv("AI_API_KEY", "").strip()
 
-max_attempts = 3
-retry_backoff_seconds = 2
+MAX_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = 2
 
-severity_min = 1
-severity_max = 5
-confidence_min = 0.0
-confidence_max = 1.0
+SEVERITY_MIN = 1
+SEVERITY_MAX = 5
+CONFIDENCE_MIN = 0.0
+CONFIDENCE_MAX = 1.0
 
-Response_Schema = {
+response_schema = {
     "machine_subsystem": str,
     "severity": int,
     "root_cause_hypothesis": str,
@@ -38,23 +37,19 @@ Response_Schema = {
     "confidence": float,
     }
 
-system_instructions = {
-    ""
-    }
-
-#Prompt
+# Prompt
 
 def build_prompt(record: dict) -> str:
-    """Creating a schema-bound prompt"""
-    return(
-        "Assess the following medical device error logs and return your assesment as JSON.\n\n"
+    """Build a prompt for structured AI analysis of an error log."""
+    return (
+        "Assess the following medical device error logs and return your assessment as JSON.\n\n"
         f"Machine ID: {record.get('machine_id', 'unknown')}\n"
         f"Machine type: {record.get('machine_type', 'unknown')}\n"
         f"Timestamp: {record.get('timestamp', 'unknown')}\n"
         f"Raw error message: {record.get('raw_message', '')}\n\n"
         "Return exactly these keys:\n"
         '  "machine_subsystem": string, the specific component or subsystem at fault\n'
-        f'  "severity": integer {severity_min}-{severity_max} '
+        f'  "severity": integer {SEVERITY_MIN}-{SEVERITY_MAX} '
         "(1 = cosmetic or informational, 3 = degraded function, "
         "5 = device unusable or actively dangerous)\n"
         '  "root_cause_hypothesis": string, one sentence on the most likely cause\n'
@@ -63,17 +58,19 @@ def build_prompt(record: dict) -> str:
         '  "recurrence_indicator": boolean, true if the message itself shows the '
         "fault is repeating (repeat counts, cycling, 'again', multiple occurrences)\n"
         '  "recommended_action": string, the concrete next step for the technician\n'
-        f'  "confidence": float {confidence_min}-{confidence_max}, your certainty '
+        f'  "confidence": float {CONFIDENCE_MIN}-{CONFIDENCE_MAX}, your certainty '
         "in this assessment; be honest and use a low value when the message is "
         "vague or ambiguous\n\n"
         "Respond with the JSON object only."
     )
 
-    #API call
+# API call
 
 def call_api(prompt: str) -> Optional[str]:
-    """Send prompt to Gemini via the OpenAI-compatible endpoint"""
-    """Catches errors and returns None instead of letting the program crash"""
+    """Send a prompt to Gemini and return the JSON response as text.
+    Returns None if the API request fails.
+    """
+
     if not AI_API_KEY:
         logger.error("AI_API_KEY is not set in .env file.")
         return None
@@ -101,19 +98,26 @@ def call_api(prompt: str) -> Optional[str]:
 
     response = None
     
-    for attempt in range(max_attempts):
+    for attempt in range(MAX_ATTEMPTS):
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
-            body = response.json()
-            return body["choices"][0]["message"]["content"]
+            body = response.json() # Convert the API response from JSON into Python data
+            content = body["choices"][0]["message"]["content"]
+            return content
         except requests.RequestException as e:
             logger.error("API call failed: %s", e)
+
+            if response is not None and response.status_code == 429:
+                logger.warning("API rate limit exceeded. Stopping retries.")
+                return None
+
             if response is not None:
                 print("API response:", response.text)
-            time.sleep(retry_backoff_seconds)
-    return None
 
+        time.sleep(RETRY_BACKOFF_SECONDS)
+
+    return None
 if __name__ == "__main__":
     record = {
         "machine_id": "MACHINE_001",
