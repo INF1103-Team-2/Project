@@ -1,8 +1,7 @@
-"""io_manager.py - Input layer (INF1103 Phase 1).
+"""io_manager.py - Input/Output layer (INF1103 Phase 1).
 
 All boundaries between the system and the outside world live in this module.
-Every print() and input() call in the entire codebase is in this file, and so is
-the Telegram alert send, because that is also a user-facing output boundary.
+Every print() and input() call in the entire codebase is in this file.
 
 This module never imports the other managers. It only collects, validates and
 displays. Orchestration happens in main.py.
@@ -13,9 +12,7 @@ import logging
 import os
 import re
 from datetime import datetime
-from typing import Any, Callable, Optional
-
-import requests
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,25 +23,16 @@ MAX_MESSAGE_LENGTH = 500
 MAX_NAME_LENGTH = 40
 
 MACHINE_TYPES = (
-    "infusion_pump",
-    "patient_monitor",
-    "ventilator",
-    "imaging_system",
-    "dialysis_machine",
-    "sterilisation_unit",
-    "other",
+    "CT scanner",
+    "X-ray machine",
+ 
 )
 
 # --- Log file ingestion format ---------------------------------------------
 # timestamp | machine_id | machine_type | raw_message
 LOG_FIELD_SEPARATOR = "|"
 EXPECTED_LOG_FIELDS = 4
-
-# --- Telegram output boundary ----------------------------------------------
-TELEGRAM_ENABLED = os.getenv("TELEGRAM_ENABLED", "false").strip().lower() == "true"
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-TELEGRAM_TIMEOUT_SECONDS = 15
+DEFAULT_LOG_PATH = "sample_error_logs.txt"
 
 LINE = "-" * 68
 
@@ -124,8 +112,11 @@ def make_log_id(machine_id: str, timestamp: str, raw_message: str) -> str:
 # ===========================================================================
 # Input collection
 # ===========================================================================
-def prompt_main_menu() -> Optional[str]:
-    """Display the main menu and return the selected action key."""
+def prompt_main_menu() -> str:
+    """Display the main menu and return the selected action label.
+
+    Returns "Exit" if input is aborted.
+    """
     actions = (
         "Enter a single error log",
         "Ingest a log file",
@@ -138,10 +129,7 @@ def prompt_main_menu() -> Optional[str]:
     print(LINE)
     print("  BIOMEDICAL EQUIPMENT ERROR LOG TRIAGE")
     print(LINE)
-    choice = _ask_choice("  Select an option: ", actions)
-    if choice is None:
-        return "Exit"
-    return choice
+    return _ask_choice("  Select an option: ", actions) or "Exit"
 
 
 def prompt_error_log() -> Optional[dict]:
@@ -154,7 +142,7 @@ def prompt_error_log() -> Optional[dict]:
     print("  New error log (blank timestamp = now, Ctrl-C to cancel)")
 
     while True:
-        machine_id = _ask("  Machine ID (e.g. PUMP-114): ")
+        machine_id = _ask("  Machine ID (e.g. CT-114): ")
         if machine_id is None:
             return None
         if MACHINE_ID_PATTERN.match(machine_id):
@@ -211,11 +199,11 @@ def prompt_file_path() -> Optional[str]:
     print("  Expected line format:")
     print("    timestamp | machine_id | machine_type | error message")
     while True:
-        path = _ask("  Path to log file [sample_data/sample_error_logs.txt]: ")
+        path = _ask(f"  Path to log file [{DEFAULT_LOG_PATH}]: ")
         if path is None:
             return None
         if not path:
-            path = "sample_data/sample_error_logs.txt"
+            path = DEFAULT_LOG_PATH
         if not os.path.isfile(path):
             print(f"  ! No file found at '{path}'. Check the path and try again.")
             continue
@@ -275,6 +263,20 @@ def read_log_file(path: str) -> tuple:
 
     logger.info("Read %d records and %d problem lines from %s", len(records), len(problems), path)
     return records, problems
+
+def save_log_file(path: str, records: list) -> None:
+    """Save records to a text file in the standard log format."""
+    try:
+        with open(path, "w", encoding="utf-8") as handle:
+            for record in records:
+                handle.write(
+                    f"{record.get('timestamp', '')} | "
+                    f"{record.get('machine_id', '')} | "
+                    f"{record.get('machine_type', '')} | "
+                    f"{record.get('raw_message', '')}\n"
+                )
+    except OSError as error:
+        logger.error("Could not save log file %s: %s", path, error)
 
 
 def prompt_query_filter() -> Optional[Callable]:
@@ -433,10 +435,10 @@ def display_goodbye() -> None:
 
 
 # ===========================================================================
-# Telegram output boundary
+# Alert display
 # ===========================================================================
 def format_alert(record: dict) -> str:
-    """Turn a processed record into the alert text an engineer receives."""
+    """Turn a processed record into the alert text an engineer should see."""
     ai = record.get("ai") or {}
     decision = record.get("decision") or {}
     return (
@@ -450,40 +452,13 @@ def format_alert(record: dict) -> str:
     )
 
 
-def send_alert(record: dict) -> bool:
-    """Send a Telegram alert for a record. Returns True only if it was sent.
+def display_alert(record: dict) -> None:
+    """Show the engineer alert on screen.
 
-    Alerting is an output boundary, so it lives here rather than in
-    logic_manager. logic_manager decides *whether* to alert; this sends it.
-    Disabled by default so the pipeline runs without any bot credentials.
+    logic_manager decides *whether* to alert; this only displays it.
     """
-    text = format_alert(record)
-
-    if not TELEGRAM_ENABLED:
-        print("  [alert suppressed - TELEGRAM_ENABLED is false]")
-        for line in text.splitlines():
-            print(f"    {line}")
-        logger.info("Alert suppressed for %s", record.get("log_id"))
-        return False
-
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        logger.error("Telegram enabled but TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is missing")
-        display_error("Telegram is enabled but credentials are missing; alert not sent.")
-        return False
-
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    try:
-        response = requests.post(
-            url,
-            json={"chat_id": TELEGRAM_CHAT_ID, "text": text},
-            timeout=TELEGRAM_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-    except requests.RequestException as error:
-        logger.error("Telegram send failed for %s: %s", record.get("log_id"), error)
-        display_error("Could not reach Telegram; the record was still saved.")
-        return False
-
-    logger.info("Telegram alert sent for %s", record.get("log_id"))
-    display_message(f"Alert sent to engineer for {record.get('machine_id', '?')}.")
-    return True
+    print()
+    print("  *** ALERT ***")
+    for line in format_alert(record).splitlines():
+        print(f"    {line}")
+    logger.info("Alert displayed for %s", record.get("log_id"))
