@@ -91,3 +91,14 @@ def update_notification_status(log_id, new_status):
             return save_records(records)
 
     return False
+
+# FUNCTION 7: Check whether a record already exists
+def record_exists(log_id):
+    records = load_records()
+
+    for record in records:
+
+        if record["log_id"] == log_id:
+            return True
+
+    return False
