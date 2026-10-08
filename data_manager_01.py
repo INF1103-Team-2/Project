@@ -54,3 +54,14 @@ def add_record(record):
     records.append(record)
     
     return save_records(records)
+
+# FUNCTION 4: Find a record using log_id
+def get_record(log_id):
+    records = load_records()
+
+    for record in records:
+
+        if record["log_id"] == log_id:
+            return record
+
+    return None
