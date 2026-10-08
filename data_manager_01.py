@@ -65,3 +65,29 @@ def get_record(log_id):
             return record
 
     return None
+
+# FUNCTION 5: Find all errors from one machine
+def get_machine_records(machine_id):
+    records = load_records()
+
+    results = []
+
+    for record in records:
+
+        if record.get("machine_id") == machine_id:
+            results.append(record)
+
+    return results
+
+# FUNCTION 6: Update notification status
+def update_notification_status(log_id, new_status):
+    records = load_records()
+
+    for record in records:
+
+        if record["log_id"] == log_id:
+            record["notification_status"] = new_status
+
+            return save_records(records)
+
+    return False
