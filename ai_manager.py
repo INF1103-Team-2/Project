@@ -259,19 +259,5 @@ def enrich_record(record: dict) -> dict:
 
     enriched["ai"] = None
     enriched["ai_error"] = last_error
-    logger.error("Record %s could not be enriched: %s", record.get("log_id", last_error))
+    logger.error("Record %s could not be enriched: %s", record.get("log_id"), last_error)
     return enriched
-
-if __name__ == "__main__":
-    record = {
-        "machine_id": "MACHINE_001",
-        "machine_type": "Infusion Pump",
-        "timestamp": "2026-10-03 21:30:05",
-        "raw_message": "Temperature exceeded 90°C"
-    }
-
-    result = enrich_record(record)
-
-    print("\n--- AI Analysis Result ---")
-    print(result)
-    

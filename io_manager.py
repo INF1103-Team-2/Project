@@ -17,7 +17,8 @@ from typing import Callable, Optional
 logger = logging.getLogger(__name__)
 
 # --- Validation rules for user-supplied input -------------------------------
-MACHINE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9\-]{2,19}$")
+MACHINE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]{2,19}$")
+ERROR_CODE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]{1,19}$")
 MIN_MESSAGE_LENGTH = 10
 MAX_MESSAGE_LENGTH = 500
 MAX_NAME_LENGTH = 40
@@ -29,9 +30,10 @@ MACHINE_TYPES = (
 )
 
 # --- Log file ingestion format ---------------------------------------------
-# timestamp | machine_id | machine_type | raw_message
+# timestamp | machine_id | error_code | machine_type | raw_message
 LOG_FIELD_SEPARATOR = "|"
-EXPECTED_LOG_FIELDS = 4
+EXPECTED_LOG_FIELDS = 5
+INVALID_FILE_MESSAGE = "Invalid log format. Upload aborted."   # Business Rule 4
 DEFAULT_LOG_PATH = "sample_error_logs.txt"
 
 LINE = "-" * 68
@@ -147,7 +149,15 @@ def prompt_error_log() -> Optional[dict]:
             return None
         if MACHINE_ID_PATTERN.match(machine_id):
             break
-        print("  ! Machine ID must be 3-20 characters: letters, digits or hyphens.")
+        print("  ! Machine ID must be 3-20 characters: letters, digits, hyphens or underscores.")
+
+    while True:
+        error_code = _ask("  Error code (e.g. E102): ")
+        if error_code is None:
+            return None
+        if ERROR_CODE_PATTERN.match(error_code):
+            break
+        print("  ! Error code must be 2-20 characters: letters, digits, hyphens or underscores.")
 
     print("  Machine type:")
     machine_type = _ask_choice("  Select type: ", MACHINE_TYPES)
@@ -186,6 +196,7 @@ def prompt_error_log() -> Optional[dict]:
     return {
         "log_id": make_log_id(machine_id, timestamp, raw_message),
         "machine_id": machine_id,
+        "error_code": error_code,
         "machine_type": machine_type,
         "timestamp": timestamp,
         "reported_by": reported_by,
@@ -197,7 +208,7 @@ def prompt_file_path() -> Optional[str]:
     """Ask for a log file path and confirm it is readable before returning it."""
     print()
     print("  Expected line format:")
-    print("    timestamp | machine_id | machine_type | error message")
+    print("    timestamp | machine_id | error_code | machine_type | error message")
     while True:
         path = _ask(f"  Path to log file [{DEFAULT_LOG_PATH}]: ")
         if path is None:
@@ -238,7 +249,7 @@ def read_log_file(path: str) -> tuple:
             problems.append(f"Line {number}: expected {EXPECTED_LOG_FIELDS} fields, got {len(parts)}")
             continue
 
-        raw_timestamp, machine_id, machine_type, *message_parts = parts
+        raw_timestamp, machine_id, error_code, machine_type, *message_parts = parts
         raw_message = LOG_FIELD_SEPARATOR.join(message_parts).strip()
 
         timestamp = _parse_timestamp(raw_timestamp)
@@ -248,6 +259,9 @@ def read_log_file(path: str) -> tuple:
         if not MACHINE_ID_PATTERN.match(machine_id):
             problems.append(f"Line {number}: invalid machine id '{machine_id}'")
             continue
+        if not ERROR_CODE_PATTERN.match(error_code):
+            problems.append(f"Line {number}: missing or invalid error code '{error_code}'")
+            continue
         if len(raw_message) < MIN_MESSAGE_LENGTH:
             problems.append(f"Line {number}: message too short to triage")
             continue
@@ -255,6 +269,7 @@ def read_log_file(path: str) -> tuple:
         records.append({
             "log_id": make_log_id(machine_id, timestamp, raw_message),
             "machine_id": machine_id,
+            "error_code": error_code,
             "machine_type": machine_type if machine_type in MACHINE_TYPES else "other",
             "timestamp": timestamp,
             "reported_by": "log_file_import",
@@ -272,6 +287,7 @@ def save_log_file(path: str, records: list) -> None:
                 handle.write(
                     f"{record.get('timestamp', '')} | "
                     f"{record.get('machine_id', '')} | "
+                    f"{record.get('error_code', '')} | "
                     f"{record.get('machine_type', '')} | "
                     f"{record.get('raw_message', '')}\n"
                 )
@@ -337,6 +353,7 @@ def display_record(record: dict) -> None:
           f"  |  {record.get('machine_type', '?')}")
     print(f"  Logged at : {record.get('timestamp', '?')}")
     print(f"  Reported  : {record.get('reported_by', '?')}")
+    print(f"  Error code: {record.get('error_code', '-')}")
     print(f"  Message   : {record.get('raw_message', '')}")
 
     if ai:

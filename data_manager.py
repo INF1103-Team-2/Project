@@ -102,3 +102,18 @@ def record_exists(log_id):
             return True
 
     return False
+
+
+def save(record):
+    """Save one processed record (framework name for add_record)."""
+    return add_record(record)
+
+
+def load():
+    """Load all records; empty list if the file is missing or corrupt."""
+    return load_records()
+
+
+def query(filter_fn):
+    """Return every stored record for which filter_fn(record) is True."""
+    return [record for record in load_records() if filter_fn(record)]
