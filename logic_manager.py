@@ -44,6 +44,37 @@ ALERT_HOUR = 7
 REPEAT_OFFENDER_THRESHOLD = 2
 
 
+def _validated_ai(record: dict) -> Optional[dict]:
+    """Return a valid AI assessment, or None when it is missing or malformed."""
+    if not isinstance(record, dict):
+        logger.warning("Cannot evaluate a non-dictionary record")
+        return None
+
+    ai = record.get("ai")
+    if ai is None:
+        return None
+    if not isinstance(ai, dict):
+        logger.warning("Record %s has a malformed AI assessment", record.get("log_id"))
+        return None
+
+    severity = ai.get("severity")
+    confidence = ai.get("confidence")
+    if (isinstance(severity, bool) or not isinstance(severity, int)
+            or not 1 <= severity <= 5):
+        logger.warning("Record %s has an invalid AI severity", record.get("log_id"))
+        return None
+    if (isinstance(confidence, bool) or not isinstance(confidence, (int, float))
+            or not 0 <= confidence <= 1):
+        logger.warning("Record %s has an invalid AI confidence", record.get("log_id"))
+        return None
+    if (not isinstance(ai.get("patient_safety_risk"), bool)
+            or not isinstance(ai.get("recurrence_indicator"), bool)):
+        logger.warning("Record %s has invalid AI boolean fields", record.get("log_id"))
+        return None
+
+    return ai
+
+
 # ===========================================================================
 # Scoring
 # ===========================================================================
@@ -53,7 +84,7 @@ def score(record: dict) -> int:
     Used for ranking the work queue. Returns 0 when AI enrichment is absent,
     since an unassessed record cannot be ranked against assessed ones.
     """
-    ai = record.get("ai")
+    ai = _validated_ai(record)
     if not ai:
         return 0
 
@@ -89,7 +120,7 @@ def route(record: dict) -> str:
     R4 (multi-condition): low severity AND no safety risk -> batch it into
        scheduled maintenance.
     """
-    ai = record.get("ai")
+    ai = _validated_ai(record)
     if not ai:
         return ROUTE_AI_UNAVAILABLE
 
@@ -111,7 +142,7 @@ def route(record: dict) -> str:
 
 def rules_fired(record: dict) -> list:
     """List the named rules that applied, for auditability in the report."""
-    ai = record.get("ai")
+    ai = _validated_ai(record)
     if not ai:
         return ["R0_ai_unavailable"]
 
