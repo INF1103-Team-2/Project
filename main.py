@@ -86,19 +86,25 @@ def find_bundles(records: list) -> tuple:
 # ===========================================================================
 def send_urgent_alert(record: dict) -> dict:
     """Show the alert, send it to Telegram, and mark it sent if delivery worked."""
-    text = logic_manager.build_alert_message(record)
+    text = io_manager.build_alert_message(record)
     repeats = (record.get("decision") or {}).get("bundled_count")
     if repeats:
         text += f"\n(Same error occurred {repeats} times within {BUNDLE_WINDOW_MINUTES} minutes)"
 
     io_manager.display_alert(record)
-    ok, info = logic_manager.send_telegram(text)
+    ok, info = io_manager.send_telegram(text)
     io_manager.display_message(f"Telegram: {info}")
     return logic_manager.mark_sent(record) if ok else record
 
 
 def process_batch(records: list, now: datetime) -> list:
     """Run records through AI enrichment, business rules, notification and storage."""
+    stored_by_id = {
+        stored.get("log_id"): stored
+        for stored in data_manager.load_records()
+        if isinstance(stored, dict)
+    }
+
     # The same log line uploaded twice has the same log_id; process it once.
     unique = {}
     for record in records:
@@ -107,7 +113,13 @@ def process_batch(records: list, now: datetime) -> list:
     processed = []
     for record in unique.values():
         enriched = ai_manager.enrich_record(record)
-        processed.append(logic_manager.process_record(enriched, now=now))
+        result = logic_manager.process_record(enriched, now=now)
+        previous_decision = (
+            stored_by_id.get(record["log_id"], {}).get("decision") or {}
+        )
+        if previous_decision.get("human_review_notification_sent"):
+            result["decision"]["human_review_notification_sent"] = True
+        processed.append(result)
 
     # Rule 3: only the first of a burst of identical errors notifies.
     followers, counts = find_bundles(processed)
@@ -124,9 +136,30 @@ def process_batch(records: list, now: datetime) -> list:
         if logic_manager.should_send_now(record):
             processed[index] = send_urgent_alert(record)
 
-    for record in processed:
+    for index, record in enumerate(processed):
         if not data_manager.add_record(record):
             io_manager.display_error(f"Could not save record {record.get('log_id')}.")
+            io_manager.display_result(record)
+            continue
+
+        decision = record.get("decision") or {}
+        if (decision.get("requires_human_review")
+                and not decision.get("human_review_notification_sent")):
+            ok, info = io_manager.send_telegram(
+                io_manager.build_human_review_message(record)
+            )
+            io_manager.display_message(f"Human review Telegram: {info}")
+            if ok:
+                updated = dict(record)
+                updated["decision"] = dict(decision)
+                updated["decision"]["human_review_notification_sent"] = True
+                if not data_manager.add_record(updated):
+                    io_manager.display_error(
+                        "Human review notification was sent, but its status "
+                        f"could not be saved for {record.get('log_id')}."
+                    )
+                record = updated
+                processed[index] = updated
         io_manager.display_result(record)
     return processed
 
@@ -138,7 +171,9 @@ def dispatch_due_reports(show_message: bool = True) -> None:
     if not due:
         return
 
-    ok, info = logic_manager.send_telegram(logic_manager.build_daily_report(due))
+    ok, info = io_manager.send_telegram(
+        io_manager.build_daily_report(due)
+    )
     message = f"Daily report ({len(due)} item(s)): {info}"
     if show_message:
         io_manager.display_message(message)

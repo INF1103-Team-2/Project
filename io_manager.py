@@ -3,8 +3,8 @@
 All boundaries between the system and the outside world live in this module.
 Every print() and input() call in the entire codebase is in this file.
 
-This module never imports the other managers. It only collects, validates and
-displays. Orchestration happens in main.py.
+This module collects and validates user input and displays output.
+Orchestration happens in main.py.
 """
 
 import hashlib
@@ -13,6 +13,8 @@ import os
 import re
 from datetime import datetime
 from typing import Callable, Optional
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +28,13 @@ MAX_NAME_LENGTH = 40
 MACHINE_TYPES = (
     "CT scanner",
     "X-ray machine",
- 
 )
 
 # --- Log file ingestion format ---------------------------------------------
 # timestamp | machine_id | error_code | machine_type | raw_message
 LOG_FIELD_SEPARATOR = "|"
 EXPECTED_LOG_FIELDS = 5
-INVALID_FILE_MESSAGE = "Invalid log format. Upload aborted."   # Business Rule 4
+INVALID_FILE_MESSAGE = "Invalid log format. Upload aborted."  # Business Rule 4
 DEFAULT_LOG_PATH = "sample_error_logs.txt"
 
 LINE = "-" * 68
@@ -92,7 +93,13 @@ def _ask_choice(prompt: str, options: tuple) -> Optional[str]:
 def _parse_timestamp(value: str) -> Optional[str]:
     """Validate an ISO-8601 timestamp and return it normalised, else None."""
     cleaned = value.replace("Z", "").strip()
-    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
+    formats = (
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%d",
+    )
+    for fmt in formats:
         try:
             return datetime.strptime(cleaned, fmt).strftime("%Y-%m-%dT%H:%M:%S")
         except ValueError:
@@ -150,7 +157,10 @@ def prompt_error_log() -> Optional[dict]:
             return None
         if MACHINE_ID_PATTERN.match(machine_id):
             break
-        print("  ! Machine ID must be 3-20 characters: letters, digits, hyphens or underscores.")
+        print(
+            "  ! Machine ID must be 3-20 characters: "
+            "letters, digits, hyphens or underscores."
+        )
 
     while True:
         error_code = _ask("  Error code (e.g. E102): ")
@@ -158,7 +168,10 @@ def prompt_error_log() -> Optional[dict]:
             return None
         if ERROR_CODE_PATTERN.match(error_code):
             break
-        print("  ! Error code must be 2-20 characters: letters, digits, hyphens or underscores.")
+        print(
+            "  ! Error code must be 2-20 characters: "
+            "letters, digits, hyphens or underscores."
+        )
 
     print("  Machine type:")
     machine_type = _ask_choice("  Select type: ", MACHINE_TYPES)
@@ -205,6 +218,9 @@ def prompt_error_log() -> Optional[dict]:
     }
 
 
+# ===========================================================================
+# Log-file input and output
+# ===========================================================================
 def prompt_file_path() -> Optional[str]:
     """Ask for a log file path and confirm it is readable before returning it."""
     print()
@@ -247,7 +263,10 @@ def read_log_file(path: str) -> tuple:
 
         parts = [part.strip() for part in text.split(LOG_FIELD_SEPARATOR)]
         if len(parts) < EXPECTED_LOG_FIELDS:
-            problems.append(f"Line {number}: expected {EXPECTED_LOG_FIELDS} fields, got {len(parts)}")
+            problems.append(
+                f"Line {number}: expected {EXPECTED_LOG_FIELDS} fields, "
+                f"got {len(parts)}"
+            )
             continue
 
         raw_timestamp, machine_id, error_code, machine_type, *message_parts = parts
@@ -277,8 +296,14 @@ def read_log_file(path: str) -> tuple:
             "raw_message": raw_message[:MAX_MESSAGE_LENGTH],
         })
 
-    logger.info("Read %d records and %d problem lines from %s", len(records), len(problems), path)
+    logger.info(
+        "Read %d records and %d problem lines from %s",
+        len(records),
+        len(problems),
+        path,
+    )
     return records, problems
+
 
 def save_log_file(path: str, records: list) -> None:
     """Save records to a text file in the standard log format."""
@@ -296,6 +321,9 @@ def save_log_file(path: str, records: list) -> None:
         logger.error("Could not save log file %s: %s", path, error)
 
 
+# ===========================================================================
+# Query and human-review prompts
+# ===========================================================================
 def prompt_query_filter() -> Optional[Callable]:
     """Build a filter function for data_manager.query() from user choices."""
     filters = (
@@ -311,11 +339,15 @@ def prompt_query_filter() -> Optional[Callable]:
         return None
 
     if choice == "Immediate escalations only":
-        return lambda record: record.get("decision", {}).get("route") == "immediate_escalation"
+        return lambda record: (
+            record.get("decision", {}).get("route") == "immediate_escalation"
+        )
     if choice == "Records flagged as a patient safety risk":
         return lambda record: bool(record.get("ai", {}).get("patient_safety_risk"))
     if choice == "Records needing human review":
-        return lambda record: bool(record.get("decision", {}).get("requires_human_review"))
+        return lambda record: bool(
+            record.get("decision", {}).get("requires_human_review")
+        )
 
     machine_id = _ask_required("  Machine ID to search for: ")
     if machine_id is None:
@@ -343,7 +375,8 @@ def prompt_review_action(can_approve_ai: bool) -> str:
 def prompt_review_severity() -> Optional[int]:
     """Ask the reviewer to select a severity from 1 through 5."""
     choice = _ask_choice(
-        "  Human-assessed severity: ", ("1 - Minimal", "2 - Low", "3 - Moderate", "4 - High", "5 - Critical")
+        "  Human-assessed severity: ",
+        ("1 - Minimal", "2 - Low", "3 - Moderate", "4 - High", "5 - Critical"),
     )
     if choice is None:
         return None
@@ -456,6 +489,9 @@ def display_batch_problems(problems: list) -> None:
         print(f"    ... and {len(problems) - 10} more (see logs/app.log)")
 
 
+# ===========================================================================
+# Summary and shutdown display
+# ===========================================================================
 def display_summary(summary: dict) -> None:
     """Show the fleet-level summary produced by logic_manager.summarise()."""
     print()
@@ -488,7 +524,7 @@ def display_goodbye() -> None:
 
 
 # ===========================================================================
-# Alert display
+# Local alert display
 # ===========================================================================
 def format_alert(record: dict) -> str:
     """Turn a processed record into the alert text an engineer should see."""
@@ -496,12 +532,15 @@ def format_alert(record: dict) -> str:
     decision = record.get("decision") or {}
     return (
         f"[{decision.get('route', 'alert').upper()}] "
-        f"{record.get('machine_id', '?')} ({record.get('machine_type', '?')})\n"
-        f"Severity {ai.get('severity', '?')}/5 | priority {decision.get('score', '?')}/100\n"
+        f"{record.get('machine_id', '?')} "
+        f"({record.get('machine_type', '?')})\n"
+        f"Severity {ai.get('severity', '?')}/5 | "
+        f"priority {decision.get('score', '?')}/100\n"
         f"Subsystem: {ai.get('machine_subsystem', 'unknown')}\n"
         f"Likely cause: {ai.get('root_cause_hypothesis', 'unknown')}\n"
         f"Action: {ai.get('recommended_action', 'inspect device')}\n"
-        f"Logged: {record.get('timestamp', '?')} | ref {record.get('log_id', '?')}"
+        f"Logged: {record.get('timestamp', '?')} | "
+        f"ref {record.get('log_id', '?')}"
     )
 
 
@@ -515,3 +554,99 @@ def display_alert(record: dict) -> None:
     for line in format_alert(record).splitlines():
         print(f"    {line}")
     logger.info("Alert displayed for %s", record.get("log_id"))
+
+
+# ===========================================================================
+# Added Telegram output integration
+# ===========================================================================
+TELEGRAM_URL = "https://api.telegram.org/bot{token}/sendMessage"
+
+
+def send_telegram(text: str) -> tuple[bool, str]:
+    """Send one message to the Telegram bot using the configured credentials."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    if not token or not chat_id:
+        logger.warning("Telegram not configured - dry run only")
+        return False, "DRY RUN (Telegram not configured)"
+
+    try:
+        response = requests.post(
+            TELEGRAM_URL.format(token=token),
+            data={"chat_id": chat_id, "text": text},
+            timeout=10,
+        )
+        if response.status_code != 200:
+            logger.error(
+                "Telegram returned %s: %s",
+                response.status_code,
+                response.text[:200],
+            )
+            return False, f"Telegram error {response.status_code}"
+
+        body = response.json()
+        if isinstance(body, dict) and body.get("ok") is True:
+            logger.info("Telegram message sent")
+            return True, "Sent"
+
+        description = (
+            body.get("description", "Telegram rejected the message")
+            if isinstance(body, dict)
+            else "Telegram returned an invalid response"
+        )
+        logger.error("Telegram rejected the message: %s", description)
+        return False, f"Telegram rejected the message: {description}"
+    except requests.RequestException as error:
+        logger.error("Telegram request failed: %s", error)
+        return False, "Could not reach Telegram"
+
+
+def build_alert_message(record: dict) -> str:
+    """Format one processed machine error for Telegram."""
+    ai = record.get("ai") or {}
+    human_review = record.get("human_review") or {}
+    decision = record.get("decision") or {}
+    severity = human_review.get("severity", ai.get("severity", "?"))
+    safety_risk = human_review.get(
+        "patient_safety_risk", ai.get("patient_safety_risk", False)
+    )
+    title = (
+        "🚨 URGENT MACHINE ERROR"
+        if decision.get("notify_now")
+        else "📋 MACHINE ERROR"
+    )
+    return (
+        f"{title}\n"
+        f"Machine: {record.get('machine_id', '?')} "
+        f"({record.get('machine_type', '?')})\n"
+        f"Time: {record.get('timestamp', '?')}\n"
+        f"Severity: {severity}/5  |  "
+        f"Priority: {decision.get('score', '?')}/100\n"
+        f"Patient safety risk: {'YES' if safety_risk else 'no'}\n"
+        f"Problem: {ai.get('machine_subsystem', 'unknown')}\n"
+        f"Likely cause: {ai.get('root_cause_hypothesis', 'unknown')}\n"
+        f"Action required: {ai.get('recommended_action', 'Inspect the machine')}\n"
+        f"Ref: {record.get('log_id', '?')}"
+    )
+
+
+def build_human_review_message(record: dict) -> str:
+    """Format a notification asking an operator to review a queued record."""
+    return (
+        "A record needs human review. Please check the CLI.\n"
+        f"Machine: {record.get('machine_id', '?')}\n"
+        f"Ref: {record.get('log_id', '?')}"
+    )
+
+
+def build_daily_report(due_records: list) -> str:
+    """Format one combined report for deferred alerts that are now due."""
+    lines = [f"📋 DAILY MACHINE REPORT ({len(due_records)} item(s))"]
+    for record in due_records:
+        ai = record.get("ai") or {}
+        decision = record.get("decision") or {}
+        lines.append(
+            f"- {record.get('machine_id', '?')} | sev {ai.get('severity', '?')}/5 | "
+            f"{ai.get('machine_subsystem', '?')} | {decision.get('route', '?')}"
+        )
+    return "\n".join(lines)

@@ -1,8 +1,5 @@
 import logging
 
-import os
-import requests
-
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -304,74 +301,8 @@ def summarise(records: list) -> dict:
         "by_route": by_route,
         "repeat_offenders": repeat_offenders,
     }
-# ===========================================================================
-# Telegram notifications  (Jia Yi)
 
-TELEGRAM_URL = "https://api.telegram.org/bot{token}/sendMessage"
- 
- 
-def send_telegram(text: str) -> tuple:
-    """Send one message to the Telegram bot. Returns (ok, info). Never crashes.
- 
-    The token and chat id come from the .env file, never from the code:
-        TELEGRAM_BOT_TOKEN=...
-        TELEGRAM_CHAT_ID=...
-    If they are missing, nothing is sent (dry run), so tests and Docker still work.
-    """
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-    if not token or not chat_id:
-        logger.warning("Telegram not configured - dry run only")
-        return False, "DRY RUN (Telegram not configured)"
- 
-    try:
-        response = requests.post(TELEGRAM_URL.format(token=token),
-                                 data={"chat_id": chat_id, "text": text},
-                                 timeout=10)
-        if response.status_code != 200:
-            logger.error("Telegram returned %s: %s", response.status_code, response.text[:200])
-            return False, f"Telegram error {response.status_code}"
 
-        body = response.json()
-        if isinstance(body, dict) and body.get("ok") is True:
-            logger.info("Telegram message sent")
-            return True, "Sent"
-
-        description = (
-            body.get("description", "Telegram rejected the message")
-            if isinstance(body, dict)
-            else "Telegram returned an invalid response"
-        )
-        logger.error("Telegram rejected the message: %s", description)
-        return False, f"Telegram rejected the message: {description}"
-    except requests.RequestException as error:
-        logger.error("Telegram request failed: %s", error)
-        return False, "Could not reach Telegram"
- 
- 
-def build_alert_message(record: dict) -> str:
-    """Turn one processed record into the Telegram alert text."""
-    ai = record.get("ai") or {}
-    human_review = record.get("human_review") or {}
-    decision = record.get("decision") or {}
-    severity = human_review.get("severity", ai.get("severity", "?"))
-    safety_risk = human_review.get(
-        "patient_safety_risk", ai.get("patient_safety_risk", False)
-    )
-    title = "🚨 URGENT MACHINE ERROR" if decision.get("notify_now") else "📋 MACHINE ERROR"
-    return (
-        f"{title}\n"
-        f"Machine: {record.get('machine_id', '?')} ({record.get('machine_type', '?')})\n"
-        f"Time: {record.get('timestamp', '?')}\n"
-        f"Severity: {severity}/5  |  Priority: {decision.get('score', '?')}/100\n"
-        f"Patient safety risk: {'YES' if safety_risk else 'no'}\n"
-        f"Problem: {ai.get('machine_subsystem', 'unknown')}\n"
-        f"Likely cause: {ai.get('root_cause_hypothesis', 'unknown')}\n"
-        f"Action required: {ai.get('recommended_action', 'Inspect the machine')}\n"
-        f"Ref: {record.get('log_id', '?')}"
-    )
- 
- 
 def should_send_now(record: dict) -> bool:
     """Rule 1 + Rule 5: send now only if the decision says notify_now,
     it has not been sent yet, and it does NOT need human review
@@ -397,17 +328,6 @@ def get_due_alerts(records: list, current_time: str) -> list:
         if send_time and send_time <= current_time:     # same ISO format, so text compare works
             due.append(record)
     return due
- 
- 
-def build_daily_report(due_records: list) -> str:
-    """One combined message for all due non-urgent alerts (avoids spam)."""
-    lines = [f"📋 DAILY MACHINE REPORT ({len(due_records)} item(s))"]
-    for record in due_records:
-        ai = record.get("ai") or {}
-        decision = record.get("decision") or {}
-        lines.append(f"- {record.get('machine_id', '?')} | sev {ai.get('severity', '?')}/5 | "
-                     f"{ai.get('machine_subsystem', '?')} | {decision.get('route', '?')}")
-    return "\n".join(lines)
  
  
 def mark_sent(record: dict) -> dict:
