@@ -302,11 +302,22 @@ def send_telegram(text: str) -> tuple:
         response = requests.post(TELEGRAM_URL.format(token=token),
                                  data={"chat_id": chat_id, "text": text},
                                  timeout=10)
-        if response.status_code == 200:
+        if response.status_code != 200:
+            logger.error("Telegram returned %s: %s", response.status_code, response.text[:200])
+            return False, f"Telegram error {response.status_code}"
+
+        body = response.json()
+        if isinstance(body, dict) and body.get("ok") is True:
             logger.info("Telegram message sent")
             return True, "Sent"
-        logger.error("Telegram returned %s: %s", response.status_code, response.text[:200])
-        return False, f"Telegram error {response.status_code}"
+
+        description = (
+            body.get("description", "Telegram rejected the message")
+            if isinstance(body, dict)
+            else "Telegram returned an invalid response"
+        )
+        logger.error("Telegram rejected the message: %s", description)
+        return False, f"Telegram rejected the message: {description}"
     except requests.RequestException as error:
         logger.error("Telegram request failed: %s", error)
         return False, "Could not reach Telegram"
