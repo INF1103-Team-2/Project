@@ -50,6 +50,23 @@ def _validated_ai(record: dict) -> Optional[dict]:
         logger.warning("Cannot evaluate a non-dictionary record")
         return None
 
+    human_review = record.get("human_review")
+    if isinstance(human_review, dict) and human_review.get("status") == "approved":
+        severity = human_review.get("severity")
+        safety_risk = human_review.get("patient_safety_risk")
+        if (isinstance(severity, bool) or not isinstance(severity, int)
+                or not 1 <= severity <= 5 or not isinstance(safety_risk, bool)):
+            logger.warning("Record %s has an invalid human assessment", record.get("log_id"))
+            return None
+        ai = record.get("ai")
+        recurring = ai.get("recurrence_indicator", False) if isinstance(ai, dict) else False
+        return {
+            "severity": severity,
+            "confidence": 1.0,
+            "patient_safety_risk": safety_risk,
+            "recurrence_indicator": recurring if isinstance(recurring, bool) else False,
+        }
+
     ai = record.get("ai")
     if ai is None:
         return None
@@ -152,6 +169,9 @@ def rules_fired(record: dict) -> list:
     recurring = bool(ai.get("recurrence_indicator"))
 
     fired = []
+    human_review = record.get("human_review")
+    if isinstance(human_review, dict) and human_review.get("status") == "approved":
+        fired.append("R6_human_assessment_approved")
     if severity >= HIGH_SEVERITY and safety_risk and confidence >= CONFIDENT:
         fired.append("R1_confident_high_severity_safety_risk")
     if confidence < CONFIDENT:
@@ -258,7 +278,13 @@ def summarise(records: list) -> dict:
         machine_id = record.get("machine_id", "unknown")
         machine_counts[machine_id] = machine_counts.get(machine_id, 0) + 1
 
-        if ai.get("patient_safety_risk"):
+        reviewed = record.get("human_review") or {}
+        safety_risk = (
+            reviewed.get("patient_safety_risk")
+            if reviewed.get("status") == "approved"
+            else ai.get("patient_safety_risk")
+        )
+        if safety_risk:
             safety_risk_count += 1
         if decision.get("requires_human_review"):
             human_review_count += 1
@@ -326,14 +352,19 @@ def send_telegram(text: str) -> tuple:
 def build_alert_message(record: dict) -> str:
     """Turn one processed record into the Telegram alert text."""
     ai = record.get("ai") or {}
+    human_review = record.get("human_review") or {}
     decision = record.get("decision") or {}
+    severity = human_review.get("severity", ai.get("severity", "?"))
+    safety_risk = human_review.get(
+        "patient_safety_risk", ai.get("patient_safety_risk", False)
+    )
     title = "🚨 URGENT MACHINE ERROR" if decision.get("notify_now") else "📋 MACHINE ERROR"
     return (
         f"{title}\n"
         f"Machine: {record.get('machine_id', '?')} ({record.get('machine_type', '?')})\n"
         f"Time: {record.get('timestamp', '?')}\n"
-        f"Severity: {ai.get('severity', '?')}/5  |  Priority: {decision.get('score', '?')}/100\n"
-        f"Patient safety risk: {'YES' if ai.get('patient_safety_risk') else 'no'}\n"
+        f"Severity: {severity}/5  |  Priority: {decision.get('score', '?')}/100\n"
+        f"Patient safety risk: {'YES' if safety_risk else 'no'}\n"
         f"Problem: {ai.get('machine_subsystem', 'unknown')}\n"
         f"Likely cause: {ai.get('root_cause_hypothesis', 'unknown')}\n"
         f"Action required: {ai.get('recommended_action', 'Inspect the machine')}\n"

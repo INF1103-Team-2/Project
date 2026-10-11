@@ -11,6 +11,7 @@ read from the user comes back from an io_manager prompt function.
 
 import logging
 import os
+import threading
 from datetime import datetime, timedelta
 
 # ai_manager calls load_dotenv() on import, which makes the .env values
@@ -25,6 +26,7 @@ LOG_FILE = os.path.join(LOG_DIR, "app.log")
 
 TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"   # io_manager normalises every timestamp to this
 BUNDLE_WINDOW_MINUTES = 10          # Business Rule 3
+DUE_REPORT_CHECK_SECONDS = 60
 
 
 def configure_logging() -> None:
@@ -129,7 +131,7 @@ def process_batch(records: list, now: datetime) -> list:
     return processed
 
 
-def dispatch_due_reports() -> None:
+def dispatch_due_reports(show_message: bool = True) -> None:
     """Rule 2: send one combined report for non-urgent alerts whose 07:00 time has arrived."""
     now_text = datetime.now().strftime(TIME_FORMAT)
     due = logic_manager.get_due_alerts(data_manager.load_records(), now_text)
@@ -137,10 +139,26 @@ def dispatch_due_reports() -> None:
         return
 
     ok, info = logic_manager.send_telegram(logic_manager.build_daily_report(due))
-    io_manager.display_message(f"Daily report ({len(due)} item(s)): {info}")
+    message = f"Daily report ({len(due)} item(s)): {info}"
+    if show_message:
+        io_manager.display_message(message)
+    else:
+        logging.getLogger(__name__).info(message)
     if ok:
         for record in due:
-            data_manager.add_record(logic_manager.mark_sent(record))
+            if not data_manager.add_record(logic_manager.mark_sent(record)):
+                logging.getLogger(__name__).error(
+                    "Could not save sent status for record %s", record.get("log_id")
+                )
+
+
+def _run_due_report_scheduler(stop_event: threading.Event) -> None:
+    """Check for due Telegram reports while the CLI remains open."""
+    while not stop_event.wait(DUE_REPORT_CHECK_SECONDS):
+        try:
+            dispatch_due_reports(show_message=False)
+        except Exception:
+            logging.getLogger(__name__).exception("Background due-report check failed")
 
 
 # ===========================================================================
@@ -196,6 +214,80 @@ def handle_query() -> None:
     io_manager.display_list(data_manager.query(filter_fn))
 
 
+def handle_review_queue() -> None:
+    """Let an operator approve the AI severity or enter a human assessment."""
+    pending = data_manager.query(
+        lambda record: bool(
+            (record.get("decision") or {}).get("requires_human_review")
+        ) and (record.get("human_review") or {}).get("status") != "approved"
+    )
+    if not pending:
+        io_manager.display_message("There are no records awaiting human review.")
+        return
+
+    io_manager.display_message(f"{len(pending)} record(s) awaiting human review.")
+    for record in pending:
+        io_manager.display_record(record)
+        ai = record.get("ai")
+        can_approve_ai = (
+            isinstance(ai, dict)
+            and isinstance(ai.get("severity"), int)
+            and not isinstance(ai.get("severity"), bool)
+            and 1 <= ai["severity"] <= 5
+            and isinstance(ai.get("patient_safety_risk"), bool)
+        )
+        action = io_manager.prompt_review_action(can_approve_ai)
+        if action == "Stop reviewing":
+            break
+        if action == "Leave pending":
+            continue
+
+        if action == "Approve AI severity":
+            severity = ai["severity"]
+            safety_risk = ai["patient_safety_risk"]
+            source = "ai_approved"
+        else:
+            severity = io_manager.prompt_review_severity()
+            if severity is None:
+                io_manager.display_message("Review cancelled; record remains pending.")
+                continue
+            safety_risk = io_manager.prompt_review_safety_risk()
+            if safety_risk is None:
+                io_manager.display_message("Review cancelled; record remains pending.")
+                continue
+            source = "human_assessed"
+
+        updated = dict(record)
+        updated["human_review"] = {
+            "status": "approved",
+            "severity": severity,
+            "patient_safety_risk": safety_risk,
+            "assessment_source": source,
+            "reviewed_at": datetime.now().strftime(TIME_FORMAT),
+        }
+        updated["decision"] = logic_manager.evaluate(updated)
+        if not data_manager.add_record(updated):
+            io_manager.display_error(
+                f"Could not save review for {record.get('log_id')}; no alert was sent."
+            )
+            continue
+
+        io_manager.display_message(
+            f"Human assessment saved: severity {severity}/5; "
+            f"patient-safety risk {'yes' if safety_risk else 'no'}."
+        )
+        if logic_manager.should_send_now(updated):
+            updated = send_urgent_alert(updated)
+            if not data_manager.add_record(updated):
+                io_manager.display_error(
+                    f"Could not save notification status for {record.get('log_id')}."
+                )
+        else:
+            io_manager.display_message(
+                f"Updated triage route: {updated['decision']['route']}."
+            )
+
+
 def handle_summary() -> None:
     """Menu action: show the consolidated fleet report."""
     io_manager.display_summary(logic_manager.summarise(data_manager.load_records()))
@@ -210,32 +302,54 @@ def main() -> None:
     io_manager.display_message(f"Loaded {len(stored)} previously processed record(s).")
     dispatch_due_reports()
 
+    stop_event = threading.Event()
+    scheduler = None
+    if (os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+            and os.getenv("TELEGRAM_CHAT_ID", "").strip()):
+        scheduler = threading.Thread(
+            target=_run_due_report_scheduler,
+            args=(stop_event,),
+            name="due-report-scheduler",
+            daemon=True,
+        )
+        scheduler.start()
+    else:
+        logging.getLogger(__name__).warning(
+            "Background due-report checks disabled: Telegram is not configured"
+        )
+
     actions = {
         "Enter a single error log": handle_single_entry,
         "Ingest a log file": handle_file_ingest,
         "View all stored records": handle_view_all,
         "Query stored records": handle_query,
+        "Review pending records": handle_review_queue,
         "Fleet summary report": handle_summary,
     }
 
-    while True:
-        choice = io_manager.prompt_main_menu()
-        if choice == "Exit":
-            io_manager.display_goodbye()
-            return
+    try:
+        while True:
+            choice = io_manager.prompt_main_menu()
+            if choice == "Exit":
+                io_manager.display_goodbye()
+                return
 
-        action = actions.get(choice)
-        if action is None:
-            io_manager.display_error("That option is not available.")
-            continue
+            action = actions.get(choice)
+            if action is None:
+                io_manager.display_error("That option is not available.")
+                continue
 
-        try:
-            action()
-        except KeyboardInterrupt:
-            io_manager.display_message("Interrupted; returning to the menu.")
-        except Exception as error:  # last line of defence: never crash the CLI
-            logging.getLogger(__name__).exception("Unhandled error in %s", choice)
-            io_manager.display_error(f"Something went wrong ({error}). Returning to the menu.")
+            try:
+                action()
+            except KeyboardInterrupt:
+                io_manager.display_message("Interrupted; returning to the menu.")
+            except Exception as error:  # last line of defence: never crash the CLI
+                logging.getLogger(__name__).exception("Unhandled error in %s", choice)
+                io_manager.display_error(f"Something went wrong ({error}). Returning to the menu.")
+    finally:
+        stop_event.set()
+        if scheduler is not None:
+            scheduler.join(timeout=2)
 
 
 if __name__ == "__main__":

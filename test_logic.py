@@ -71,6 +71,21 @@ def test_process_record() -> None:
     assert "decision" not in URGENT_RECORD
 
 
+def test_malformed_ai_assessment() -> None:
+    malformed_record = {
+        **URGENT_RECORD,
+        "ai": {**URGENT_RECORD["ai"], "severity": "high"},
+    }
+    decision = lm.evaluate(malformed_record, now=TEST_TIME)
+
+    assert lm.score(malformed_record) == 0
+    assert lm.route(malformed_record) == lm.ROUTE_AI_UNAVAILABLE
+    assert lm.rules_fired(malformed_record) == ["R0_ai_unavailable"]
+    assert decision["route"] == lm.ROUTE_AI_UNAVAILABLE
+    assert decision["score"] == 0
+    assert decision["requires_human_review"] is True
+
+
 def test_summarise() -> None:
     records = [
         lm.process_record(URGENT_RECORD, now=TEST_TIME),
@@ -107,7 +122,11 @@ def test_send_telegram() -> None:
         results["missing config"] = lm.send_telegram(text)
         post.assert_not_called()
 
-    success_response = SimpleNamespace(status_code=200, text='{"ok":true}')
+    success_response = SimpleNamespace(
+        status_code=200,
+        text='{"ok":true}',
+        json=lambda: {"ok": True, "result": {"message_id": 1}},
+    )
     with patch.dict(os.environ, {
         "TELEGRAM_BOT_TOKEN": token,
         "TELEGRAM_CHAT_ID": chat_id,
@@ -127,12 +146,28 @@ def test_send_telegram() -> None:
             patch.object(lm.logger, "error"):
         results["simulated HTTP error"] = lm.send_telegram(text)
 
+    rejected_response = SimpleNamespace(
+        status_code=200,
+        text='{"ok":false,"description":"bot was blocked by the user"}',
+        json=lambda: {"ok": False, "description": "bot was blocked by the user"},
+    )
+    with patch.dict(os.environ, {
+        "TELEGRAM_BOT_TOKEN": token,
+        "TELEGRAM_CHAT_ID": chat_id,
+    }), patch.object(lm.requests, "post", return_value=rejected_response), \
+            patch.object(lm.logger, "error"):
+        results["Telegram rejection in HTTP 200"] = lm.send_telegram(text)
+
     print("send_telegram results (simulated; no live Telegram request):")
     print(pformat(results))
     assert results == {
         "missing config": (False, "DRY RUN (Telegram not configured)"),
         "simulated success": (True, "Sent"),
         "simulated HTTP error": (False, "Telegram error 503"),
+        "Telegram rejection in HTTP 200": (
+            False,
+            "Telegram rejected the message: bot was blocked by the user",
+        ),
     }
 
 
@@ -180,6 +215,7 @@ def test_get_due_alerts() -> None:
 
 TESTS = (
     test_process_record,
+    test_malformed_ai_assessment,
     test_summarise,
     test_send_telegram,
     test_should_send_now,

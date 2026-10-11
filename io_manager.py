@@ -124,6 +124,7 @@ def prompt_main_menu() -> str:
         "Ingest a log file",
         "View all stored records",
         "Query stored records",
+        "Review pending records",
         "Fleet summary report",
         "Exit",
     )
@@ -329,6 +330,34 @@ def confirm(question: str) -> bool:
     return answer is not None and answer.lower() in ("y", "yes")
 
 
+def prompt_review_action(can_approve_ai: bool) -> str:
+    """Ask whether to approve the AI severity or enter a human severity."""
+    actions = (
+        ("Approve AI severity", "Enter severity manually", "Leave pending", "Stop reviewing")
+        if can_approve_ai
+        else ("Enter severity manually", "Leave pending", "Stop reviewing")
+    )
+    return _ask_choice("  Review action: ", actions) or "Stop reviewing"
+
+
+def prompt_review_severity() -> Optional[int]:
+    """Ask the reviewer to select a severity from 1 through 5."""
+    choice = _ask_choice(
+        "  Human-assessed severity: ", ("1 - Minimal", "2 - Low", "3 - Moderate", "4 - High", "5 - Critical")
+    )
+    if choice is None:
+        return None
+    return int(choice[0])
+
+
+def prompt_review_safety_risk() -> Optional[bool]:
+    """Ask whether the reviewed fault presents a patient-safety risk."""
+    choice = _ask_choice("  Patient-safety risk? ", ("Yes", "No"))
+    if choice is None:
+        return None
+    return choice == "Yes"
+
+
 # ===========================================================================
 # Output display
 # ===========================================================================
@@ -367,6 +396,13 @@ def display_record(record: dict) -> None:
         print(f"  Confidence     : {ai.get('confidence', '?')}")
     else:
         print(f"  --- AI assessment unavailable: {record.get('ai_error', 'unknown reason')}")
+
+    human_review = record.get("human_review") or {}
+    if human_review.get("status") == "approved":
+        print("  --- Human-approved assessment ---")
+        print(f"  Severity       : {human_review.get('severity', '?')}/5")
+        print(f"  Safety risk    : {'YES' if human_review.get('patient_safety_risk') else 'no'}")
+        print(f"  Reviewed at    : {human_review.get('reviewed_at', '?')}")
 
     if decision:
         print("  --- Triage decision ---")
