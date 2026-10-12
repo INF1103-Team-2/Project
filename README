@@ -100,17 +100,4 @@ docker build -t inf1103-group2-errorlogging .
 docker run --rm inf1103-group2-errorlogging python test_logic.py
 ```
 
-## Use the same data file from VS Code
 
-To run the app locally and use the same persistent JSON file as Docker, open a
-VS Code PowerShell terminal in this project folder and run:
-
-```powershell
-$env:DATA_FILE = (Join-Path (Get-Location).Path "data\processed_records.json")
-python main.py
-```
-
-`ai_manager.py` loads the project's `.env` file when the app starts. The
-`DATA_FILE` environment setting points both local and Docker runs at the same
-host-side JSON file. Avoid running both instances at the same time because
-they would write to that file concurrently.
