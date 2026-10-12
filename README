@@ -1,1 +1,116 @@
-This is the start of our inf project yay
+# Biomedical Equipment Error Log Triage
+
+## Run the CLI in Docker (PowerShell)
+
+### 1. Start Docker Desktop
+
+Open Docker Desktop and wait until its engine is running.
+
+### 2. Open PowerShell in the project folder
+
+In File Explorer, open the `Project` folder, click the address bar, type
+`powershell`, and press Enter. This opens PowerShell in that folder without
+needing to use a specific computer's path. Alternatively, use `Set-Location`
+with the path to the `Project` folder on your own computer:
+
+```powershell
+Set-Location "{path\to\your}\Project"
+```
+
+The current folder should contain `Dockerfile`, `requirements.txt`, and
+`main.py`. The commands below assume PowerShell and that folder.
+
+### 3. Prepare the `.env` file
+
+Create or edit `.env` in the project folder. Add your own API credentials and
+settings, or request the team's `.env` file from the Group 2 leader through a
+private channel. Do not post credentials in the README, source code, or a
+public chat, and do not commit `.env`.
+
+```dotenv
+AI_API_KEY=your_api_key
+AI_BASE_URL=https://api.groq.com/openai/v1
+AI_MODEL=openai/gpt-oss-20b
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+```
+
+`AI_BASE_URL` and `AI_MODEL` should match the AI provider and model for your
+key. Telegram settings are optional. The Docker image does not contain `.env`;
+`docker run --env-file .env` passes the values into the container at runtime.
+
+### 4. Create persistent-data and log folders
+
+```powershell
+New-Item -ItemType Directory -Force .\data, .\logs
+```
+
+`data` stores processed records on your computer. Put optional machine log
+files to ingest in `logs`. The app's own diagnostic file, `app.log`, is also
+written there when running in Docker.
+
+### 5. Build the Docker image
+
+```powershell
+docker build -t inf1103-group2-errorlogging .
+```
+
+This builds an image named `inf1103-group2-errorlogging` using the `Dockerfile` in the
+current folder. Rebuild it after changing application code or the Dockerfile.
+
+### 6. Run the interactive app with mounted folders
+
+```powershell
+docker run --rm -it `
+  --mount "type=bind,source=$((Get-Location).Path)\data,target=/data" `
+  --mount "type=bind,source=$((Get-Location).Path)\logs,target=/app/logs" `
+  --env-file .env `
+  -e DATA_FILE=/data/processed_records.json `
+  inf1103-group2-errorlogging
+```
+
+The `data` mount maps `Project\data` on your computer to `/data` in the
+container. Records are saved to `Project\data\processed_records.json` and
+remain there after the container exits. The `DATA_FILE` setting tells
+`data_manager.py` to use that mounted location.
+
+The `logs` mount maps `Project\logs` to `/app/logs`. The app writes
+`app.log` there; you can also put machine log files in this folder and select
+them for ingestion by entering a path such as `/app/logs/errors.txt` when
+prompted. This mount is writable so the app can create its diagnostic log.
+If you do not need file ingestion, you can leave `logs` empty; the app still
+runs normally.
+
+`--rm` removes the container when it exits, while the mounted data and log
+files stay on your computer. Select **Exit** in the app menu to stop it.
+
+### 7. Run the offline logic tests in Docker
+
+After building the image, run:
+
+```powershell
+docker run --rm inf1103-group2-errorlogging python test_logic.py
+```
+
+The tests mock AI and Telegram calls, so they do not require credentials or
+send real requests. To rebuild before testing after code changes:
+
+```powershell
+docker build -t inf1103-group2-errorlogging .
+docker run --rm inf1103-group2-errorlogging python test_logic.py
+```
+
+## Use the same data file from VS Code
+
+To run the app locally and use the same persistent JSON file as Docker, open a
+VS Code PowerShell terminal in this project folder and run:
+
+```powershell
+$env:DATA_FILE = (Join-Path (Get-Location).Path "data\processed_records.json")
+python main.py
+```
+
+`ai_manager.py` loads the project's `.env` file when the app starts. The
+`DATA_FILE` environment setting points both local and Docker runs at the same
+host-side JSON file. Avoid running both instances at the same time because
+they would write to that file concurrently.

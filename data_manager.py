@@ -2,7 +2,7 @@ import json
 import os
 
 
-DATA_FILE = "processed_records.json"
+DATA_FILE = os.getenv("DATA_FILE", "processed_records.json")
 
 # Function 1: Load all stored records
 def load_records():
