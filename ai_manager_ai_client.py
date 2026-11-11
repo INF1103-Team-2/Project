@@ -189,3 +189,15 @@ class AIClient:
             logger.error("Validation failed: confidence %s outside 0.0-1.0", data ["confidence"])
             return False
         return True
+
+    def _to_assessment(self, data: dict) -> AIAssessment:
+        """Build a clean, trimmed AIAssessment from validated data"""
+        return AIAssessment(
+            machine_subsystem = data["machine_subsystem"].strip(),
+            severity = int(data["severity"]),
+            root_cause_hypothesis = (data["root_cause_hypothesis"]).strip(),
+            patient_safety_risk = bool(data["patient_safety_risk"]),
+            recurrence_indicator = bool(data["recurrence_indicator"]),
+            recommended_action = (data["recommended_action"]).strip(),
+            confidence = round(float(data["confidence"]), 2),        
+        )
