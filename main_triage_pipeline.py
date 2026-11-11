@@ -130,3 +130,25 @@ class TriagePipeline:
             delivered = delivered or ok
         if delivered:
             log.decision.mark_sent()
+
+    # ======================================================================
+    # Rule 2: deferred alerts at 07:00
+    # ======================================================================
+    def dispatch_due_reports(self, show_message: bool = True) -> None:
+        """One combined telegram report for deferred alerts and those that are due"""
+        due = self._scheduler.get_due_alerts(self._repository.load_all(), datetime.now())
+        if not due:
+            return
+
+        ok, info = self._telegram.send_daily_report(due)
+        message = f"Daily report ({len(due)} item(s)): {info}"
+        if show_message:
+            self._view.display_message(message)
+        else:
+            logger.info(message)
+        if ok:
+            for log in due:
+                log.decision.mark_sent()
+                if not self._repository.save(log):
+                    logger.error("Could not save sent status for record %s", log.log_id)
+                    
