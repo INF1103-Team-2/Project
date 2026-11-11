@@ -151,4 +151,24 @@ class TriagePipeline:
                 log.decision.mark_sent()
                 if not self._repository.save(log):
                     logger.error("Could not save sent status for record %s", log.log_id)
-                    
+
+    def start_background_checks(self) -> None:
+        """Check for due reports every minute while the app is open"""
+        if not self._telegram.is_configured():
+            logger.warning("Background due-report checks disabled: Telegram is not configured")
+            return
+
+        def loop() -> None:
+            while not self._stop_event.wait(self.DUE_REPORT_CHECK_SECONDS):
+                try:
+                    self.dispatch_due_reports(show_message = False)
+                except Exception:
+                    logger.exception("Background due report check failed")
+
+        self._thread = threading.Thread(target = loop, name = "due-report-scheduler", daemon = True)
+        self._thread.start()
+
+    def stop_background_checks(self) -> None:
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout = 2)
