@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from ai_manager_oop import (AIConfigError, AIConnectionError, AIManager,
+from ai_manager_ai_client import (AIConfigError, AIConnectionError, AIManager,
                         AIResponseError, MockAIClient, ResponseValidator)
 
 RECORD = {"log_id": "L1", "machine_id": "M1", "raw_message": "Temperature exceeded 90°C"}
