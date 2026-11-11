@@ -1,0 +1,76 @@
+@startuml report_feature
+!include style.iuml
+title <size:20><b>New Feature: HTML / Markdown Report – UML Class Diagram</b></size>\n<size:12>io_manager_report_* files · JSON Derulo · INF1103 Phase 2</size>
+
+class ReportManager {
+  - _analyzer : FleetAnalyzer
+  - _formatters : ReportFormatter [1..*]
+  - _output_dir : str
+  ==
+  + __init__(output_dir : str, formatters : ReportFormatter [1..*])
+  + available_formats() : str [1..*]
+  + generate(logs : ErrorLog [0..*], format_name : str,\n     now : datetime | None = None) : str | None
+  - _find(format_name : str) : ReportFormatter | None
+}
+
+abstract class ReportFormatter <<abstract>> #E9E4FF ##[bold]5B4BC4 {
+  + {abstract} name() : str
+  + {abstract} file_extension() : str
+  + {abstract} format(summary : dict, logs : ErrorLog [0..*], generated_at : str) : str
+  + {static} sort_by_priority(logs : ErrorLog [0..*]) : ErrorLog [0..*]
+  + {static} status_of(log : ErrorLog) : str
+  + {static} severity_of(log : ErrorLog) : int | None
+}
+
+class HTMLReportFormatter <<web page>> #FFE8D6 ##[bold]D9652B {
+  + {static} ROUTE_COLOURS : dict[str, str]
+  - _css : str
+  ==
+  + name() : str  <<override>>  → "HTML"
+  + file_extension() : str  <<override>>  → ".html"
+  + format(summary : dict, logs : ErrorLog [0..*], generated_at : str) : str  <<override>>
+  - _cards(summary : dict) : str
+  - _routes(summary : dict) : str
+  - _repeat_offenders(summary : dict) : str
+  - _records(logs : ErrorLog [0..*]) : str
+}
+
+class MarkdownReportFormatter <<plain text>> #D9F4F1 ##[bold]1E9A8A {
+  + name() : str  <<override>>  → "Markdown"
+  + file_extension() : str  <<override>>  → ".md"
+  + format(summary : dict, logs : ErrorLog [0..*], generated_at : str) : str  <<override>>
+  - {static} _cell(value : str) : str
+}
+
+class FleetAnalyzer <<logic_manager>> #F4F4F4 ##[dashed]888888
+class ErrorLog <<logic_manager>> #F4F4F4 ##[dashed]888888
+
+ReportManager "1" *-[#B8336A,bold]left- "1" FleetAnalyzer : <color:#B8336A>Composition</color>\n<size:10>creates & owns ▶</size>
+ReportManager "1" o-[#D9652B,bold]down- "1..*" ReportFormatter : <color:#D9652B>Aggregation</color>\n<size:10>formats with ▶</size>
+HTMLReportFormatter -[#5B4BC4,bold]up-|> ReportFormatter : <color:#5B4BC4>Inheritance</color>\n<size:10>is-a ReportFormatter</size>
+MarkdownReportFormatter -[#5B4BC4,bold]up-|> ReportFormatter : <color:#5B4BC4>Inheritance</color>\n<size:10>is-a ReportFormatter</size>
+FleetAnalyzer -[#2F6DB5,bold]down-> ErrorLog : <color:#2F6DB5>Association</color>\n<size:10>summarises 0..* ▶</size>
+ReportFormatter -[#2F6DB5,bold]left-> ErrorLog : <color:#2F6DB5>Association</color>\n<size:10>formats ▶</size>
+
+note right of ReportManager
+  <b><color:#7A3FB0>Polymorphism + OCP</color></b>
+  <i>generate()</i> finds the formatter by name and calls
+  <i>formatter.format(...)</i> – it never checks which
+  subclass it got. Adding PDF or CSV = one new
+  subclass + one list entry in main.py; ReportManager,
+  the CLI and the GUI are not edited.
+  HTML text is escaped (safe against &lt;script&gt; in logs).
+end note
+
+legend right
+  <b>Legend</b>
+  |= Concept |= Notation |
+  | <color:#5B4BC4><b>Abstract class</b></color> | «abstract», <i>italic</i> method |
+  | <color:#5B4BC4><b>Inheritance</b></color> | solid ──▷ |
+  | <color:#2F6DB5><b>Association</b></color> | solid ──> |
+  | <color:#D9652B><b>Aggregation</b></color> | hollow ◇── at whole |
+  | <color:#B8336A><b>Composition</b></color> | filled ◆── at owner |
+  | <color:#7A3FB0><b>Polymorphism</b></color> | «override» via ReportFormatter |
+  |<back:#F4F4F4> grey dashed box </back>| class from another manager |
+endlegend
+@enduml

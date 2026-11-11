@@ -1,0 +1,47 @@
+@startuml ai_manager
+!include style.iuml
+title <size:20><b>ai_manager – UML Class Diagram</b></size>\n<size:12>AI enrichment · JSON Derulo · INF1103 Phase 2</size>
+
+class AIClient {
+  <i>OpenAI-compatible API (OpenRouter / Gemini)</i>
+  - _base_url : str
+  - _model : str
+  - _api_key : str
+  - _max_attempts : int = 3
+  - _retry_backoff_seconds : int = 2
+  ==
+  + __init__(base_url : str, model : str, api_key : str)
+  + is_configured() : bool
+  + enrich(log : ErrorLog) : None
+  - _build_prompt(log : ErrorLog) : str
+  - _call_api(prompt : str) : str | None
+  - _parse_response(raw : str | None) : dict | None
+  - _validate(data : dict | None) : bool
+  - _to_assessment(data : dict) : AIAssessment
+}
+
+class ErrorLog <<logic_manager>> #F4F4F4 ##[dashed]888888
+class AIAssessment <<logic_manager>> #F4F4F4 ##[dashed]888888
+
+AIClient -[#2F6DB5,bold]-> ErrorLog : <color:#2F6DB5>Association</color>\n<size:10>enriches ▶</size>
+AIClient -[#2F6DB5,bold]-> AIAssessment : <color:#2F6DB5>Association</color>\n<size:10>builds ▶ (then hands to ErrorLog)</size>
+ErrorLog "0..*" -[#2F6DB5,bold]-> "0..1" AIAssessment : <color:#2F6DB5>Association</color>\n<size:10>assessed by ▶</size>
+
+note right of AIClient
+  <b>enrich(log)</b> retries up to 3 times, then calls
+  <i>log.set_ai_assessment(...)</i> on success or
+  <i>log.set_ai_error(...)</i> on failure.
+  <b>Encapsulation:</b> API key and URL are private,
+  passed in by main (no module-level globals).
+  <b>Testing:</b> mock AIClient in test_logic.py –
+  no live API needed.
+end note
+
+legend right
+  <b>Legend</b>
+  |= Concept |= Notation |
+  | <color:#2F6DB5><b>Encapsulation</b></color> | <b>-</b> private, <b>+</b> public |
+  | <color:#2F6DB5><b>Association</b></color> | solid ──> |
+  |<back:#F4F4F4> grey dashed box </back>| class from another manager |
+endlegend
+@enduml

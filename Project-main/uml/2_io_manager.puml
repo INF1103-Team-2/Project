@@ -1,0 +1,105 @@
+@startuml io_manager
+!include style.iuml
+title <size:20><b>io_manager – UML Class Diagram</b></size>\n<size:12>Console, log files and notifications · JSON Derulo · INF1103 Phase 2</size>
+
+interface OutputView <<interface>> #EAF7E4 ##[bold]3C8D2F {
+  + {abstract} display_message(text : str) : None
+  + {abstract} display_error(text : str) : None
+  + {abstract} display_result(log : ErrorLog) : None
+}
+
+interface Notifier <<interface>> #EAF7E4 ##[bold]3C8D2F {
+  + {abstract} notify_urgent(log : ErrorLog) : tuple[bool, str]
+}
+
+class ConsoleUI {
+  <i>the ONLY class that calls print() / input()</i>
+  + {static} MENU_OPTIONS : str [8]
+  - _line : str
+  ==
+  + prompt_main_menu() : str
+  + prompt_error_log() : ErrorLog | None
+  + prompt_file_path() : str | None
+  + prompt_query_filter() : Callable[[ErrorLog], bool] | None
+  + prompt_report_format(format_names : str [1..*]) : str | None
+  + prompt_review_action(can_approve_ai : bool) : str
+  + prompt_review_severity() : int | None
+  + prompt_review_safety_risk() : bool | None
+  + confirm(question : str) : bool
+  + display_message(text : str) : None  <<implements>>
+  + display_error(text : str) : None  <<implements>>
+  + display_result(log : ErrorLog) : None  <<implements>>
+  + display_alert(text : str) : None
+  + display_record(log : ErrorLog) : None
+  + display_list(logs : ErrorLog [0..*]) : None
+  + display_batch_problems(problems : str [0..*]) : None
+  + display_summary(summary : dict) : None
+  + display_goodbye() : None
+  - _ask(prompt : str) : str | None
+  - _ask_required(prompt : str, max_length : int) : str | None
+  - _ask_choice(prompt : str, options : str [1..*]) : str | None
+}
+
+class ConsoleNotifier <<on screen>> #FFE8D6 ##[bold]D9652B {
+  - _ui : ConsoleUI
+  ==
+  + __init__(ui : ConsoleUI)
+  + notify_urgent(log : ErrorLog) : tuple[bool, str]  <<implements>>
+  - _format_alert(log : ErrorLog) : str
+}
+
+class TelegramNotifier <<to engineers' phones>> #D9F4F1 ##[bold]1E9A8A {
+  - _token : str
+  - _chat_id : str
+  - _url_template : str
+  ==
+  + __init__(token : str, chat_id : str)
+  + is_configured() : bool
+  + notify_urgent(log : ErrorLog) : tuple[bool, str]  <<implements>>
+  + send_review_request(log : ErrorLog) : tuple[bool, str]
+  + send_daily_report(logs : ErrorLog [1..*]) : tuple[bool, str]
+  - _post(text : str) : tuple[bool, str]
+  - _build_alert_message(log : ErrorLog) : str
+}
+
+class LogFileReader {
+  <i>timestamp | machine_id | error_code | machine_type | message</i>
+  + {static} INVALID_FILE_MESSAGE : str
+  - _separator : str = "|"
+  - _expected_fields : int = 5
+  ==
+  + read(path : str) : tuple[ErrorLog [0..*], str [0..*]]
+  + save(path : str, logs : ErrorLog [0..*]) : None
+}
+
+class ErrorLog <<logic_manager>> #F4F4F4 ##[dashed]888888
+
+OutputView <|.[#3C8D2F,dashed,thickness=2]. ConsoleUI : <color:#3C8D2F>Interface</color>\n<size:10>implements</size>
+Notifier <|.[#3C8D2F,dashed,thickness=2]. ConsoleNotifier : <color:#3C8D2F>Interface</color>\n<size:10>implements</size>
+Notifier <|.[#3C8D2F,dashed,thickness=2]. TelegramNotifier : <color:#3C8D2F>Interface</color>\n<size:10>implements</size>
+ConsoleNotifier "0..*" -[#2F6DB5,bold]left-> "1" ConsoleUI : <color:#2F6DB5>Association</color>\n<size:10>displays via ▶</size>
+ConsoleUI -[#2F6DB5,bold]down-> ErrorLog : <color:#2F6DB5>Association</color>\n<size:10>creates / displays ▶</size>
+LogFileReader -[#2F6DB5,bold]down-> ErrorLog : <color:#2F6DB5>Association</color>\n<size:10>creates 0..* ▶</size>
+TelegramNotifier -[#2F6DB5,bold]down-> ErrorLog : <color:#2F6DB5>Association</color>\n<size:10>alerts about ▶</size>
+LogFileReader -[hidden]right- ConsoleUI
+
+note bottom of Notifier
+  <b><color:#7A3FB0>Polymorphism + LSP</color></b>: the pipeline loops over
+  <b>Notifier [1..*]</b> and calls <i>notify_urgent(log)</i>.
+  Returns (delivered, info). Screen notifiers return
+  (False, "") – only Telegram can mark a log "sent".
+  <b>ISP:</b> review requests / daily reports are Telegram-only.
+end note
+
+legend right
+  <b>Legend</b>
+  |= Concept |= Notation |
+  | <color:#2F6DB5><b>Encapsulation</b></color> | <b>-</b> private, <b>+</b> public |
+  | <color:#3C8D2F><b>Interface</b></color> | «interface», dashed ┄┄▷ |
+  | <color:#2F6DB5><b>Association</b></color> | solid ──> |
+  | <color:#7A3FB0><b>Polymorphism</b></color> | «implements» via Notifier / OutputView |
+  |<back:#F4F4F4> grey dashed box </back>| class from another manager |
+  |<back:#FFE8D6> ConsoleNotifier </back>| orange – shows on screen |
+  |<back:#D9F4F1> TelegramNotifier </back>| teal – sends to phones |
+endlegend
+@enduml

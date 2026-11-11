@@ -1,0 +1,8 @@
+.env
+.git
+__pycache__/
+*.py[cod]
+data/
+input_logs/
+logs/
+processed_records.json

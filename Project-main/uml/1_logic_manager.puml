@@ -1,0 +1,166 @@
+@startuml logic_manager
+!include style.iuml
+title <size:20><b>logic_manager – UML Class Diagram</b></size>\n<size:12>Domain objects + triage rules · JSON Derulo · INF1103 Phase 2</size>
+
+' ---------- Domain object (Classes & objects + Encapsulation) ----------
+class ErrorLog {
+  <i>one machine error log – replaces the old record dict</i>
+  + {static} MACHINE_ID_PATTERN, ERROR_CODE_PATTERN : Pattern
+  + {static} MACHINE_TYPES : str [2]
+  + {static} MIN_MESSAGE_LENGTH, MAX_MESSAGE_LENGTH : int
+  - _log_id : str
+  - _machine_id : str
+  - _error_code : str
+  - _machine_type : str
+  - _timestamp : str
+  - _reported_by : str
+  - _raw_message : str
+  - _ai_assessment : AIAssessment | None
+  - _ai_error : str | None
+  - _human_assessment : HumanAssessment | None
+  - _decision : Decision | None
+  ==
+  + __init__(machine_id : str, error_code : str, machine_type : str,\n     timestamp : str, reported_by : str, raw_message : str,
+     log_id : str | None = None)
+  + <<property>> <i>(read-only, one per private field)</i>
+  + set_ai_assessment(assessment : AIAssessment) : None
+  + set_ai_error(message : str) : None
+  + record_human_review(severity : int, safety_risk : bool, source : str) : None
+  + effective_assessment() : Assessment | None
+  + apply_decision(route : str, score : int, notify_now : bool, send_time : str,\n     requires_review : bool, rules_fired : str [0..*]) : None
+  + to_dict() : dict
+  + {static} from_dict(data : dict) : ErrorLog
+  + {static} make_log_id(machine_id : str, timestamp : str, raw_message : str) : str
+  + {static} parse_timestamp(value : str) : str | None
+}
+
+class Decision #FDE7EF ##[bold]B8336A {
+  <i>created only inside ErrorLog.apply_decision()</i>
+  - _route : str
+  - _score : int
+  - _notify_now : bool
+  - _scheduled_send_time : str
+  - _requires_human_review : bool
+  - _rules_fired : str [0..*]
+  - _notification_sent : bool
+  - _review_notification_sent : bool
+  - _bundled_count : int | None
+  - _suppressed_by : str | None
+  ==
+  + <<property>> <i>(read-only, one per private field)</i>
+  + mark_sent() : None
+  + mark_review_notified() : None
+  + mark_suppressed(lead_log_id : str) : None
+  + set_bundled_count(count : int) : None
+  + to_dict() : dict
+  + {static} from_dict(data : dict) : Decision
+}
+
+' ---------- Abstract class + Inheritance ----------
+abstract class Assessment <<abstract>> #E9E4FF ##[bold]5B4BC4 {
+  <i>constructor rejects severity outside 1–5</i>
+  + {static} SEVERITY_MIN = 1, SEVERITY_MAX = 5
+  - _severity : int
+  - _patient_safety_risk : bool
+  - _recurrence_indicator : bool
+  ==
+  + __init__(severity : int, patient_safety_risk : bool, recurrence_indicator : bool)
+  + <<property>> <i>(read-only, one per private field)</i>
+  + {abstract} confidence() : float
+  + {abstract} source() : str
+  + {abstract} to_dict() : dict
+}
+
+class AIAssessment <<from the AI>> #FFE8D6 ##[bold]D9652B {
+  <color:#D9652B><b>▣ AI-only state</b></color>
+  - _confidence : float
+  - _machine_subsystem : str
+  - _root_cause_hypothesis : str
+  - _recommended_action : str
+  ==
+  + <<property>> <i>(read-only, one per private field)</i>
+  + confidence() : float  <<override>>
+  + source() : str  <<override>>  → "ai"
+  + to_dict() : dict  <<override>>
+  + {static} from_dict(data : dict) : AIAssessment
+}
+
+class HumanAssessment <<from a reviewer>> #D9F4F1 ##[bold]1E9A8A {
+  <color:#1E9A8A><b>✎ Human-only state</b></color>
+  - _assessment_source : str
+  - _reviewed_at : str
+  ==
+  + <<property>> <i>(read-only, one per private field)</i>
+  + confidence() : float  <<override>>  → 1.0
+  + source() : str  <<override>>  → "ai_approved" / "human_assessed"
+  + to_dict() : dict  <<override>>
+  + {static} from_dict(data : dict, recurrence_indicator : bool) : HumanAssessment
+}
+
+' ---------- Business rules ----------
+class TriageEngine {
+  <i>Rules R1–R6, scoring and send times</i>
+  + {static} CONFIDENT : float = 0.70
+  - _defer_days_by_route : dict[str, int]
+  ==
+  + evaluate(log : ErrorLog, now : datetime | None = None) : None
+  - _score(assessment : Assessment | None) : int
+  - _route(assessment : Assessment | None) : str
+  - _rules_fired(log : ErrorLog) : str [0..*]
+  - _next_alert_time(now : datetime, defer_days : int) : str
+}
+
+class AlertScheduler {
+  <i>Rules 1, 2, 3 and 5 – when alerts go out</i>
+  + {static} BUNDLE_WINDOW_MINUTES : int = 10
+  - _bundle_window : timedelta
+  ==
+  + bundle_repeats(logs : ErrorLog [0..*]) : None
+  + should_send_now(log : ErrorLog) : bool
+  + get_due_alerts(logs : ErrorLog [0..*], now : datetime) : ErrorLog [0..*]
+}
+
+class FleetAnalyzer {
+  <i>old summarise(), now a class (fleet summary menu)</i>
+  + {static} REPEAT_OFFENDER_THRESHOLD : int = 2
+  ==
+  + summarise(logs : ErrorLog [0..*]) : dict
+}
+
+' ---------- Relationships ----------
+AIAssessment -[#5B4BC4,bold]down-|> Assessment : <color:#5B4BC4>Inheritance</color>\n<size:10>is-an Assessment</size>
+HumanAssessment -[#5B4BC4,bold]down-|> Assessment : <color:#5B4BC4>Inheritance</color>\n<size:10>is-an Assessment</size>
+
+ErrorLog "1" *-[#B8336A,bold]down- "0..1" Decision : <color:#B8336A>Composition</color>\n<size:10>creates & owns ▶</size>
+ErrorLog "1" *-[#B8336A,bold]down- "0..1" HumanAssessment : <color:#B8336A>Composition</color>\n<size:10>record_human_review() creates ▶</size>
+Decision -[hidden]right- AIAssessment
+AIAssessment -[hidden]right- HumanAssessment
+ErrorLog "0..*" -[#2F6DB5,bold]down-> "0..1" AIAssessment : <color:#2F6DB5>Association</color>\n<size:10>assessed by ▶ (made by AIClient)</size>
+
+TriageEngine -[#2F6DB5,bold]-> ErrorLog : <color:#2F6DB5>Association</color>\n<size:10>evaluates ▶</size>
+FleetAnalyzer -[#2F6DB5,bold]-> ErrorLog : <color:#2F6DB5>Association</color>\n<size:10>summarises 0..* ▶</size>
+AlertScheduler -[#2F6DB5,bold]-> ErrorLog : <color:#2F6DB5>Association</color>\n<size:10>schedules alerts for ▶</size>
+
+note right of Assessment
+  <b><color:#7A3FB0>Polymorphism + LSP</color></b>
+  TriageEngine calls
+  <i>log.effective_assessment().severity / .confidence()</i>
+  and never checks which subclass it got.
+  HumanAssessment can stand in for AIAssessment
+  (human review overrides the AI result).
+end note
+
+legend right
+  <b>Legend</b>
+  |= Concept |= Notation |
+  | <color:#2F6DB5><b>Classes & objects</b></color> | class box (ErrorLog replaces dict) |
+  | <color:#2F6DB5><b>Encapsulation</b></color> | <b>-</b> private, <b>+</b> public / «property» |
+  | <color:#5B4BC4><b>Abstract class</b></color> | «abstract», <i>italic</i> method |
+  | <color:#5B4BC4><b>Inheritance</b></color> | solid ──▷ |
+  | <color:#2F6DB5><b>Association</b></color> | solid ──> |
+  | <color:#B8336A><b>Composition</b></color> | filled ◆── at owner |
+  | <color:#7A3FB0><b>Polymorphism</b></color> | «override» via Assessment |
+  |<back:#FFE8D6> AIAssessment </back>| orange – from the AI model |
+  |<back:#D9F4F1> HumanAssessment </back>| teal – from a reviewer |
+endlegend
+@enduml

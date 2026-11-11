@@ -1,0 +1,31 @@
+[
+    {
+        "log_id": "0fec916bb5d7",
+        "machine_id": "CT-114",
+        "error_code": "E102",
+        "machine_type": "CT scanner",
+        "timestamp": "2026-10-09T11:44:14",
+        "reported_by": "owen",
+        "raw_message": "scan failed",
+        "ai": {
+            "machine_subsystem": "Imaging system",
+            "severity": 3,
+            "root_cause_hypothesis": "A software or communication failure caused the scan to abort before completion",
+            "patient_safety_risk": false,
+            "recurrence_indicator": false,
+            "recommended_action": "Restart the scanner, review detailed system logs, verify firmware integrity, and run a diagnostic test to confirm the imaging subsystem is functioning correctly",
+            "confidence": 0.4
+        },
+        "decision": {
+            "route": "human_triage",
+            "score": 27,
+            "notify_now": true,
+            "scheduled_send_time": "2026-10-09T11:44:19",
+            "requires_human_review": true,
+            "rules_fired": [
+                "R2_low_confidence_pending_review",
+                "R5_confidence_penalty_applied"
+            ]
+        }
+    }
+]

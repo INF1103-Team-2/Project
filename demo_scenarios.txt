@@ -1,0 +1,6 @@
+2026-10-12T09:00:00 | CT-101 | E501 | CT scanner | Scanner stopped during an active scan and displayed a hardware fault
+2026-10-12T09:05:00 | XR-202 | E210 | X-ray machine | Image quality changed unexpectedly during operation
+2026-10-12T09:10:00 | CT-303 | E310 | CT scanner | Cooling system warning repeated 3 times during operation
+2026-10-12T09:16:00 | CT-303 | E310 | CT scanner | Cooling system warning repeated again during operation
+2026-10-12T09:20:00 | XR-404 | E105 | X-ray machine | Non-critical panel indicator light is dim
+2026-10-12T09:25:00 | CT-505 | E220 | CT scanner | System reports a brief sensor warning and then returns to normal

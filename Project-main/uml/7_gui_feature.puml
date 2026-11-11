@@ -1,0 +1,104 @@
+@startuml gui_feature
+!include style.iuml
+title <size:20><b>Advanced Feature: Desktop GUI (Tkinter) – UML Class Diagram</b></size>\n<size:12>python main.py --gui · JSON Derulo · INF1103 Phase 2</size>
+
+class GuiApp {
+  <i>controller: what each button does</i>
+  - _window : GuiWindow
+  - _reader : LogFileReader
+  - _pipeline : TriagePipeline
+  - _repository : RecordRepository
+  - _analyzer : FleetAnalyzer
+  - _report_manager : ReportManager
+  - _filters : dict[str, Callable[[ErrorLog], bool]]
+  ==
+  + __init__(window : GuiWindow, reader : LogFileReader, pipeline : TriagePipeline,\n     repository : RecordRepository, analyzer : FleetAnalyzer,\n     report_manager : ReportManager)
+  + run() : None
+  - _refresh(select_id : str | None = None) : None
+  - _on_add() : None
+  - _on_import() : None
+  - _process(logs : ErrorLog [1..*]) : None
+  - _on_review() : None
+  - _review_next(pending : ErrorLog [0..*], index : int) : None
+  - _on_report() : None
+}
+
+class GuiWindow <<Tkinter window>> #FFE8D6 ##[bold]D9652B {
+  <i>view: widgets, dialogs; thread-safe job queue</i>
+  + {static} FILTERS : str [4]
+  + {static} ROUTE_ROW_COLOURS : dict[str, str]
+  - _root : Tk
+  - _jobs : Queue
+  - _shown_logs : dict[str, ErrorLog]
+  - _actions : dict[str, Callable]
+  ==
+  + bind_actions(actions : dict[str, Callable]) : None
+  + run() : None
+  + current_filter() : tuple[str, str]
+  + display_message(text : str) : None  <<implements>>
+  + display_error(text : str) : None  <<implements>>
+  + display_result(log : ErrorLog) : None  <<implements>>
+  + show_alert(text : str) : None
+  + run_background(label : str, task : Callable, on_done : Callable) : None
+  + show_records(logs : ErrorLog [0..*]) : None
+  + show_summary(summary : dict) : None
+  + show_details(log : ErrorLog | None) : None
+  + set_pending_count(count : int) : None
+  + select(log_id : str) : None
+  + ask_new_log() : ErrorLog | None
+  + ask_file_path() : str | None
+  + ask_review(log : ErrorLog, position : str) : tuple | str | None
+  + ask_report_format(format_names : str [1..*]) : str | None
+  + offer_open(path : str) : None
+  + show_info(title : str, text : str) : None
+  + show_error(title : str, text : str) : None
+}
+
+class GuiNotifier <<pop-up>> #D9F4F1 ##[bold]1E9A8A {
+  - _window : GuiWindow
+  ==
+  + __init__(window : GuiWindow)
+  + notify_urgent(log : ErrorLog) : tuple[bool, str]  <<implements>>
+  - _format_alert(log : ErrorLog) : str
+}
+
+interface OutputView <<interface>> #EAF7E4 ##[bold]3C8D2F {
+  + {abstract} display_message(text : str) : None
+  + {abstract} display_error(text : str) : None
+  + {abstract} display_result(log : ErrorLog) : None
+}
+interface Notifier <<interface>> #EAF7E4 ##[bold]3C8D2F {
+  + {abstract} notify_urgent(log : ErrorLog) : tuple[bool, str]
+}
+class TriagePipeline <<main>> #F4F4F4 ##[dashed]888888
+class ReportManager <<io_manager>> #F4F4F4 ##[dashed]888888
+class RecordRepository <<data_manager>> #F4F4F4 ##[dashed]888888
+
+GuiApp "1" -[#2F6DB5,bold]down-> "1" GuiWindow : <color:#2F6DB5>Association</color>\n<size:10>drives ▶</size>
+GuiApp "1" -[#2F6DB5,bold]left-> "1" TriagePipeline : <color:#2F6DB5>Association</color>\n<size:10>runs work on ▶</size>
+GuiApp -[#2F6DB5,bold]right-> "1" ReportManager : <color:#2F6DB5>Association</color>\n<size:10>reports ▶</size>
+GuiApp -[#2F6DB5,bold]up-> "1" RecordRepository : <color:#2F6DB5>Association</color>\n<size:10>loads ▶</size>
+GuiWindow .[#3C8D2F,dashed,thickness=2]down.|> OutputView : <color:#3C8D2F>Interface</color>\n<size:10>implements</size>
+GuiNotifier .[#3C8D2F,dashed,thickness=2]down.|> Notifier : <color:#3C8D2F>Interface</color>\n<size:10>implements</size>
+GuiNotifier "0..*" -[#2F6DB5,bold]left-> "1" GuiWindow : <color:#2F6DB5>Association</color>\n<size:10>pops up via ▶</size>
+
+note right of GuiNotifier
+  <b><color:#7A3FB0>Polymorphism + LSP</color></b>
+  GuiWindow stands in for ConsoleUI (both are
+  OutputView); GuiNotifier stands in for
+  ConsoleNotifier (both are Notifier).
+  TriagePipeline is <b>not edited</b> to support the GUI (OCP).
+  Slow AI / Telegram calls run on a worker thread;
+  widgets are only touched on the Tk main thread.
+end note
+
+legend right
+  <b>Legend</b>
+  |= Concept |= Notation |
+  | <color:#2F6DB5><b>Encapsulation</b></color> | <b>-</b> private, <b>+</b> public |
+  | <color:#3C8D2F><b>Interface</b></color> | «interface», dashed ┄┄▷ |
+  | <color:#2F6DB5><b>Association</b></color> | solid ──> |
+  | <color:#7A3FB0><b>Polymorphism</b></color> | «implements» |
+  |<back:#F4F4F4> grey dashed box </back>| class from another diagram |
+endlegend
+@enduml

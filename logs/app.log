@@ -1,0 +1,5 @@
+2026-10-09 11:40:26,991 INFO     __main__       Application started
+2026-10-09 11:43:47,229 INFO     __main__       Application started
+2026-10-09 11:44:20,563 INFO     ai_manager     Record 0fec916bb5d7 enriched on attempt 1
+2026-10-09 11:44:20,563 INFO     logic_manager  Record 0fec916bb5d7 routed to human_triage with score 27
+2026-10-09 11:45:03,982 INFO     __main__       Application started

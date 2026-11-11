@@ -1,0 +1,94 @@
+@startuml main
+!include style.iuml
+skinparam nodesep 60
+title <size:20><b>main – UML Class Diagram</b></size>\n<size:12>Shared pipeline + command-line front end · JSON Derulo · INF1103 Phase 2</size>
+
+class TriagePipeline {
+  <i>AI → rules → alerts → storage; shared by CLI and GUI</i>
+  + {static} DUE_REPORT_CHECK_SECONDS : int = 60
+  - _view : OutputView
+  - _ai : AIClient
+  - _engine : TriageEngine
+  - _scheduler : AlertScheduler
+  - _repository : RecordRepository
+  - _notifiers : Notifier [1..*]
+  - _telegram : TelegramNotifier
+  - _stop_event : Event
+  - _thread : Thread | None
+  ==
+  + __init__(view : OutputView, ai : AIClient, engine : TriageEngine,\n     scheduler : AlertScheduler, repository : RecordRepository,\n     notifiers : Notifier [1..*], telegram : TelegramNotifier)
+  + process_batch(logs : ErrorLog [0..*], now : datetime) : ErrorLog [0..*]
+  + apply_review(log : ErrorLog, severity : int, safety_risk : bool, source : str) : bool
+  + pending_reviews() : ErrorLog [0..*]
+  + dispatch_due_reports(show_message : bool = True) : None
+  + start_background_checks() : None
+  + stop_background_checks() : None
+  - _send_urgent_alert(log : ErrorLog) : None
+}
+
+class TriageApp {
+  <i>command-line front end</i>
+  - _ui : ConsoleUI
+  - _reader : LogFileReader
+  - _pipeline : TriagePipeline
+  - _repository : RecordRepository
+  - _analyzer : FleetAnalyzer
+  - _report_manager : ReportManager
+  ==
+  + __init__(ui : ConsoleUI, reader : LogFileReader, pipeline : TriagePipeline,\n     repository : RecordRepository, analyzer : FleetAnalyzer,\n     report_manager : ReportManager)
+  + run() : None
+  - _handle_single_entry() : None
+  - _handle_file_ingest() : None
+  - _handle_view_all() : None
+  - _handle_query() : None
+  - _handle_review_queue() : None
+  - _handle_summary() : None
+  - _handle_generate_report() : None
+}
+
+class GuiApp <<see GUI diagram>> #F4F4F4 ##[dashed]888888
+interface OutputView <<interface>> #EAF7E4 ##[dashed]3C8D2F
+interface Notifier <<interface>> #EAF7E4 ##[dashed]3C8D2F
+class AIClient <<ai_manager>> #F4F4F4 ##[dashed]888888
+class TriageEngine <<logic_manager>> #F4F4F4 ##[dashed]888888
+class AlertScheduler <<logic_manager>> #F4F4F4 ##[dashed]888888
+class RecordRepository <<data_manager>> #F4F4F4 ##[dashed]888888
+class TelegramNotifier <<io_manager>> #F4F4F4 ##[dashed]888888
+class ConsoleUI <<io_manager>> #F4F4F4 ##[dashed]888888
+class LogFileReader <<io_manager>> #F4F4F4 ##[dashed]888888
+class FleetAnalyzer <<logic_manager>> #F4F4F4 ##[dashed]888888
+class ReportManager <<io_manager>> #F4F4F4 ##[dashed]888888
+
+TriageApp "1" -[#2F6DB5,bold]right-> "1" TriagePipeline : <color:#2F6DB5>Association</color>\n<size:10>runs work on</size>
+GuiApp "1" -[#2F6DB5,bold]left-> "1" TriagePipeline : <color:#2F6DB5>Association</color>\n<size:10>runs work on</size>
+
+TriagePipeline -[#2F6DB5,bold]down-> "1" OutputView : <color:#2F6DB5>Association</color>\n<size:10>shows progress</size>
+TriagePipeline "1" o-[#D9652B,bold]down- "1..*" Notifier : <color:#D9652B>Aggregation</color>\n<size:10>alerts through</size>
+TriagePipeline -[#2F6DB5,bold]down-> "1" AIClient : <color:#2F6DB5>Association</color>\n<size:10>enriches</size>
+TriagePipeline -[#2F6DB5,bold]down-> "1" TriageEngine : <color:#2F6DB5>Association</color>\n<size:10>evaluates</size>
+TriagePipeline -[#2F6DB5,bold]down-> "1" AlertScheduler : <color:#2F6DB5>Association</color>\n<size:10>timing</size>
+TriagePipeline -[#2F6DB5,bold]down-> "1" RecordRepository : <color:#2F6DB5>Association</color>\n<size:10>saves</size>
+TriagePipeline -[#2F6DB5,bold]down-> "1" TelegramNotifier : <color:#2F6DB5>Association</color>\n<size:10>reviews / daily</size>
+
+TriageApp -[#2F6DB5,bold]down-> "1" ConsoleUI : <color:#2F6DB5>Association</color>\n<size:10>asks / shows</size>
+TriageApp -[#2F6DB5,bold]down-> "1" LogFileReader : <color:#2F6DB5>Association</color>\n<size:10>reads files</size>
+TriageApp -[#2F6DB5,bold]down-> "1" FleetAnalyzer : <color:#2F6DB5>Association</color>\n<size:10>summary</size>
+TriageApp -[#2F6DB5,bold]down-> "1" ReportManager : <color:#2F6DB5>Association</color>\n<size:10>reports</size>
+
+note top of TriagePipeline
+  <b>SRP / DIP:</b> the pipeline has no menu and never prints.
+  It talks to an <b>OutputView</b> and a list of <b>Notifier</b>s,
+  so the CLI (ConsoleUI + ConsoleNotifier) and the GUI
+  (GuiWindow + GuiNotifier) reuse it unchanged.
+  <b>main.py</b> (no class) builds the objects for either front end.
+end note
+
+legend right
+  <b>Legend</b>
+  |= Concept |= Notation |
+  | <color:#2F6DB5><b>Encapsulation</b></color> | <b>-</b> private, <b>+</b> public |
+  | <color:#2F6DB5><b>Association</b></color> | solid ──> (uses, doesn't own) |
+  | <color:#D9652B><b>Aggregation</b></color> | hollow ◇── at whole |
+  |<back:#F4F4F4> grey dashed box </back>| class from another diagram |
+endlegend
+@enduml
