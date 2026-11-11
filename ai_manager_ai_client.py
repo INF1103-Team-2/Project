@@ -68,3 +68,87 @@ class AIClient:
 
         log.set_ai_assessment(last_error)
         logger.error("Record %s could not be enriched: %s", log.log_id, last_error)
+
+    def build_prompt(self, log: ErrorLog) -> str:
+        smin, smax = AIAssessment.SEVERITY_MIN, AIAssessment.SEVERITY_MAX
+        cmin, cmax = AIAssessment.CONFIDENCE_MIN, AIAssessment.CONFIDENCE_MAX
+        return (
+            "Assess the following medical device error logs and return your assessment in Json.\n\n"
+            f"Machine ID: {log.machine_id or 'unknown'}\n"
+            f"Machine type: {log.machine_type or 'unknown'}\n"
+            f"Timestamp: {log.timestamp or 'unknown'}\n"
+            f"Raw error message: {log.raw_message}\n\n"
+            "Return exactly these keys:\n"
+            ' "machine_subsystem": string, the specific component or subsystem at fault\n'
+            f' "severity": integer {smin}-{smax} '
+            "(1 = cosmetic or informational, 3 = degraded function, "
+            "5 = device unsuable or actively dangerous)\n"
+            ' "root_cause hypothesis": string, one sentence on the most likely cause\n'
+            '  "patient_safety_risk": boolean, true only if this fault could directly '
+            "harm a patient or produce a clinically misleading reading\n"
+            '  "recurrence_indicator": boolean, true if the message itself shows the '
+            "fault is repeating (repeat counts, cycling, 'again', multiple occurrences)\n"
+            '  "recommended_action": string, the concrete next step for the technician\n'
+            f'  "confidence": float {cmin}-{cmax}, your certainty '
+            "in this assessment; be honest and use a low value when the message is "
+            "vague or ambiguous\n\n"
+            "Respond with the JSON object only."
+        )
+    def _call_api(self, prompt: str) -> Optional[str]:
+        """Return the model's reply text, or None if the request failed."""
+        payload = {
+            "model": self._model,
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an expert equipment engineer. "
+                        "Respong ONLY with valid JSON matching requested keys."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+        }
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+        try:
+            response = requests.post(f"{self._base_url}/chat/completions",
+                                     json = payload, headers = headers, timeout = 30)
+            response.raise_for_status()
+            body = response.json()
+            return body["choices"][0]["message"]["content"]
+        except requests.RequestException as error:
+            logger.error("API call failed: %s", error)
+            return None
+
+    def _parse_response(self, raw: Optional[str]) -> Optional[dict]:
+        """Pulls the JSON object out of the reply (it may be wrapped in ``` fences)"""
+        if not raw or not isinstance(raw, str):
+            logger.error("Nothing to parse from the AI response.")
+            return None
+
+        text = raw.strip()
+        if text.startswith("```"):      #Checks for ```
+            text = text.strip()
+            if text.lower().startswith("json"):
+                text = text[4:]
+            text = text.strip()
+
+        start = text.find("{")
+        end = text.find("}")
+        if start == -1 or end == -1 or end < start:
+            logger.error("No JSON object found in the AI response: %r", raw[:120])
+            return None
+        try:
+            parsed = json.loads(text[start:end +1])
+        except json.JSONDecodeError as error:
+            logger.error("AI response was not a valid JSON value: %s", error)
+            return None
+        if not isinstance(parsed, dict):
+            logger.error("AI response parsed to %s, expected an object", type(parsed).__name__)
+            return None
+        return parsed
