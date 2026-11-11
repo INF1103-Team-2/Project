@@ -120,3 +120,13 @@ class TriagePipeline:
                          and log.decision.requires_human_review
                          and log.human_assessment is None)
         )
+
+    def _send_urgent_alert(self, log: ErrorLog) -> None:
+        delivered = False
+        for notifier in self._notifiers:
+            ok, info = notifier.notify_urgent(log)
+            if info:
+                self._view.display_message(info)
+            delivered = delivered or ok
+        if delivered:
+            log.decision.mark_sent()
