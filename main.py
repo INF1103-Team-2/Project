@@ -1,25 +1,34 @@
-"""main.py - Entry point (INF1103 Phase 1).
+"""main.py - entry point (INF1103 Phase 2, OOP).
 
-Wires the pipeline together:
+    python main.py          command-line menu
+    python main.py --gui    desktop window (Tkinter)
 
-    user / file -> io_manager -> ai_manager -> logic_manager -> data_manager
-
-This file performs no direct terminal interaction of its own. Every message
-shown to the user goes through an io_manager display function, and every value
-read from the user comes back from an io_manager prompt function.
+Builds one object of each class, connects them, and starts a front end.
+No class lives in this file.
 """
 
 import logging
 import os
-import threading
-from datetime import datetime, timedelta
+import sys
 
-# ai_manager calls load_dotenv() on import, which makes the .env values
-# (AI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID) visible to every module.
-import ai_manager
-import data_manager
-import io_manager
-import logic_manager
+from dotenv import load_dotenv
+
+from ai_manager_ai_client import AIClient
+from data_manager_phase2 import RecordRepository
+from io_manager_console_notifier import ConsoleNotifier
+from io_manager_console_ui import ConsoleUI
+from io_manager_html_report_formatter import HTMLReportFormatter
+from io_manager_log_file_reader import LogFileReader
+from io_manager_markdown_report_formatter import MarkdownReportFormatter
+from io_manager_notifier import Notifier
+from io_manager_output_view import OutputView
+from io_manager_report_manager import ReportManager
+from io_manager_telegram_notifier import TelegramNotifier
+from logic_manager_alert_scheduler import AlertScheduler
+from logic_manager_fleet_analyzer import FleetAnalyzer
+from logic_manager_triage_engine import TriageEngine
+from main_triage_app import TriageApp
+from main_triage_pipeline import TriagePipeline
 
 LOG_DIR = "logs"
 LOG_FILE = os.path.join(LOG_DIR, "app.log")
