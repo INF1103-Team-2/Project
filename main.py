@@ -68,3 +68,21 @@ def build_share() -> dict:
         ),
     }
 
+
+
+def main() -> None:
+    load_dotenv
+    configure_logging()
+    if "--gui" in sys.argv[1:]:
+        try:
+            app = build_gui_app()
+        except ImportError:
+            print("The GUI needs Tkinter, which is not installed here"
+                  "(e.g. inside Docker). Run 'python main.py' for the menu.")
+            return
+        app.run()
+    else:
+        build_console_app.run()
+
+if __name__ == "__main__":
+    main()
