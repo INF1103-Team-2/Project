@@ -112,3 +112,11 @@ class TriagePipeline:
         else:
             self._view.display_message(f"Updated triage route: {log.decision.route}.")
         return True
+
+    def pending_review(self) -> list[ErrorLog]:
+        """Logs flagged for human review that nobody assessed yet"""
+        return self._repository.query(
+            lambda log: (log.decision is not None
+                         and log.decision.requires_human_review
+                         and log.human_assessment is None)
+        )
