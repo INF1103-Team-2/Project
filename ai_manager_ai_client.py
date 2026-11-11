@@ -152,3 +152,40 @@ class AIClient:
             logger.error("AI response parsed to %s, expected an object", type(parsed).__name__)
             return None
         return parsed
+
+    def _validate(self, data: Optional[dict]) -> bool:
+        """Checks every key and type so bad bad data never reaches the rules"""
+        if not isinstance(data, dict):
+            logger.error("Validation failed: response is not a dictionary.")
+            return False
+
+        for key, expected_type in self.RESPONSE_SCHEMA.items():
+            if key not in data:
+                logger.error("Validation failed: missing required key '%s'", key)
+                return False
+        value = data[key]
+        if expected_type is bool:
+            if not isinstance(value,bool):
+                logger.error("Validation failed: '%s' must be a boolean, got %r", key, value)
+                return False
+            elif expected_type is int:
+                if isinstance(value, bool) or not isinstance(value, int):
+                    logger.error("Validation failed: '%s' must be a integer, got %r", key, value)
+                    return False
+            elif expected_type is float:
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    logger.error("Validation failed: '%s' must be a number, got %r", key, value)
+                    return False
+            elif expected_type is str:
+                if isinstance(value, str) or not value.strip():
+                    logger.error("Validation failed: '%s' must be a number, got %r", key)
+                    return False
+
+        if not AIAssessment.SEVERITY_MIN <= data["severity"] <= AIAssessment.SEVERITY_MAX:
+            logger.error("Validation failed: severity %s outside 1-5", data ["severity"])
+            return False
+
+        if not AIAssessment.CONFIDENCE_MIN <= data["confidence"] <= AIAssessment.CONFIDENCE_MAX:
+            logger.error("Validation failed: confidence %s outside 0.0-1.0", data ["confidence"])
+            return False
+        return True
