@@ -1,263 +1,232 @@
-import json #parses model's replies
-import logging #logging of errors and warnings so no need to print
-import os #reads enviroment variables
-import time
-from typing import Optional
+"""ai_manager.py - AI processing layer (INF1103 Phase 1).
 
-import requests #HTTP calls
+The core engine. Every record processed by the system passes through here.
+Delete this module and the application cannot triage anything - the severity,
+subsystem, root-cause hypothesis, safety-risk flag and confidence that
+logic_manager depends on are all produced by the model reading free-text
+machine output. There is no keyword fallback, by design.
+
+This file contains no domain rules. It builds a prompt, calls the API, parses
+the response and validates the schema. Nothing else.
+
+Provider configuration is environment-driven and uses an OpenAI-compatible
+chat completions endpoint, so the same code works against Gemini (default),
+Groq, OpenRouter, Ollama or OpenAI.
+"""
+
+import json
+import logging
+import os
+import time
+from abc import ABC, abstractmethod
+
+import requests
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
 load_dotenv()
-
 logger = logging.getLogger(__name__)
 
-# AI API configuration
-AI_BASE_URL = os.getenv(
-    "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"
-).rstrip("/")
-AI_MODEL = os.getenv("AI_MODEL", "gemini-2.0-flash")
-AI_API_KEY = os.getenv("AI_API_KEY", "").strip()
 
-MAX_ATTEMPTS = 3
-RETRY_BACKOFF_SECONDS = 2
+# ---------------- Exceptions (inheritance) ----------------
+class AIError(Exception):
+    """Base class for all AI Manager errors."""
 
-SEVERITY_MIN = 1
-SEVERITY_MAX = 5
-CONFIDENCE_MIN = 0.0
-CONFIDENCE_MAX = 1.0
 
-response_schema = {
-    "machine_subsystem": str,
-    "severity": int,
-    "root_cause_hypothesis": str,
-    "patient_safety_risk": bool,
-    "recurrence_indicator": bool,
-    "recommended_action": str,
-    "confidence": float,
-}
+class AIConfigError(AIError):
+    """API key missing. Retrying will not help."""
 
-#------------------------------------------------------------
-#Prompt
-#------------------------------------------------------------
-def build_prompt(record: dict) -> str:
-    """Build a prompt for structured AI analysis of an error log."""
-    return (
-        "Assess the following medical device error logs and return your assessment as JSON.\n\n"
-        f"Machine ID: {record.get('machine_id', 'unknown')}\n"
-        f"Machine type: {record.get('machine_type', 'unknown')}\n"
-        f"Timestamp: {record.get('timestamp', 'unknown')}\n"
-        f"Raw error message: {record.get('raw_message', '')}\n\n"
-        "Return exactly these keys:\n"
-        '  "machine_subsystem": string, the specific component or subsystem at fault\n'
-        f'  "severity": integer {SEVERITY_MIN}-{SEVERITY_MAX} '
-        "(1 = cosmetic or informational, 3 = degraded function, "
-        "5 = device unusable or actively dangerous)\n"
-        '  "root_cause_hypothesis": string, one sentence on the most likely cause\n'
-        '  "patient_safety_risk": boolean, true only if this fault could directly '
-        "harm a patient or produce a clinically misleading reading\n"
-        '  "recurrence_indicator": boolean, true if the message itself shows the '
-        "fault is repeating (repeat counts, cycling, 'again', multiple occurrences)\n"
-        '  "recommended_action": string, the concrete next step for the technician\n'
-        f'  "confidence": float {CONFIDENCE_MIN}-{CONFIDENCE_MAX}, your certainty '
-        "in this assessment; be honest and use a low value when the message is "
-        "vague or ambiguous\n\n"
-        "Respond with the JSON object only."
-    )
 
-# Ai response validation
+class AIConnectionError(AIError):
+    """API unreachable, timed out or returned an error."""
 
-def validate_ai_response(content: str) -> Optional[dict]:
-    """Validate and return the AI JSON response."""
-    try:
-        data = json.loads(content)
-    except json.JSONDecodeError:
-        logger.error("AI returned invalid JSON.")
-        return None
 
-    for key in response_schema:
-        if key not in data:
-            logger.error("AI response is missing key: %s", key)
-            return None
+class AIResponseError(AIError):
+    """Reply is not valid JSON or does not match the schema."""
 
-    if not isinstance(data["severity"], int) or not 1 <= data["severity"] <= 5:
-        logger.error("Invalid severity value.")
-        return None
 
-    if not 0 <= data["confidence"] <= 1:
-        logger.error("Invalid confidence value.")
-        return None
+# ---------------- AI clients (abstract class / interface) ----------------
+class AIClient(ABC):
+    """Every AI client must return the model's reply as text."""
 
-    return data
+    @abstractmethod
+    def complete(self, system_prompt: str, user_prompt: str) -> str:
+        pass
 
-# API call
 
-def call_api(prompt: str) -> Optional[dict]:
-    """Send a prompt to Gemini and return the JSON response as text.
-    Returns None if the API request fails.
-    """
+class GeminiClient(AIClient):
+    """Real client: calls Gemini's OpenAI-compatible API."""
 
-    if not AI_API_KEY:
-        logger.error("AI_API_KEY is not set in .env file.")
-        return None
+    def __init__(self):
+        self._base_url = os.getenv(
+            "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"
+        ).rstrip("/")
+        self._model = os.getenv("AI_MODEL", "gemini-2.0-flash")
+        self.__api_key = os.getenv("AI_API_KEY", "").strip()  # private
 
-    url = f"{AI_BASE_URL}/chat/completions"
-    payload = {
-        "model": AI_MODEL,
-        "temperature": 0,
-        "response_format": {"type": "json_object"},
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "You are an expert equipment engineer. "
-                    "Respond ONLY with valid JSON matching the requested keys."
-                ),
-                },
-                {"role": "user", "content": prompt},
+    def complete(self, system_prompt: str, user_prompt: str) -> str:
+        if not self.__api_key:
+            raise AIConfigError("AI_API_KEY is not configured")
+        payload = {
+            "model": self._model,
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
         }
-    headers = {
-        "Authorization": f"Bearer {AI_API_KEY}",
-        "Content-Type": "application/json",
+        headers = {"Authorization": f"Bearer {self.__api_key}"}
+        try:
+            response = requests.post(f"{self._base_url}/chat/completions",
+                                     json=payload, headers=headers, timeout=30)
+            response.raise_for_status()
+            return response.json()["choices"][0]["message"]["content"]
+        except (requests.RequestException, ValueError, KeyError, IndexError) as error:
+            raise AIConnectionError(f"API call failed: {error}") from error
+
+
+class MockAIClient(AIClient):
+    """Fake client for tests: returns preset replies (or raises preset errors)."""
+
+    def __init__(self, replies):
+        self._replies = list(replies)
+
+    def complete(self, system_prompt: str, user_prompt: str) -> str:
+        reply = self._replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+
+# ---------------- Prompt ----------------
+class PromptBuilder:
+    SYSTEM_PROMPT = ("You are an expert equipment engineer. "
+                     "Respond ONLY with valid JSON matching the requested keys.")
+
+    def build(self, record: dict) -> str:
+        return (
+            "Assess the following medical device error logs and return your assessment as JSON.\n\n"
+            f"Machine ID: {record.get('machine_id', 'unknown')}\n"
+            f"Machine type: {record.get('machine_type', 'unknown')}\n"
+            f"Timestamp: {record.get('timestamp', 'unknown')}\n"
+            f"Raw error message: {record.get('raw_message', '')}\n\n"
+            "Return exactly these keys:\n"
+            '  "machine_subsystem": string, the specific component or subsystem at fault\n'
+            '  "severity": integer 1-5 (1 = cosmetic or informational, '
+            "3 = degraded function, 5 = device unusable or actively dangerous)\n"
+            '  "root_cause_hypothesis": string, one sentence on the most likely cause\n'
+            '  "patient_safety_risk": boolean, true only if this fault could directly '
+            "harm a patient or produce a clinically misleading reading\n"
+            '  "recurrence_indicator": boolean, true if the message itself shows the '
+            "fault is repeating (repeat counts, cycling, 'again', multiple occurrences)\n"
+            '  "recommended_action": string, the concrete next step for the technician\n'
+            '  "confidence": float 0.0-1.0, your certainty in this assessment; be honest '
+            "and use a low value when the message is vague or ambiguous\n\n"
+            "Respond with the JSON object only."
+        )
+
+
+# ---------------- Parse + validate the reply ----------------
+class ResponseValidator:
+    SCHEMA = {
+        "machine_subsystem": str,
+        "severity": int,
+        "root_cause_hypothesis": str,
+        "patient_safety_risk": bool,
+        "recurrence_indicator": bool,
+        "recommended_action": str,
+        "confidence": float,
     }
 
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-        response.raise_for_status()
-        body = response.json()
-        return body["choices"][0]["message"]["content"]
-    except requests.RequestException as e:
-        logger.error("API call failed: %s", e)
-        return None 
+    def parse(self, raw: str) -> dict:
+        """Pull the JSON object out of the reply text."""
+        if not isinstance(raw, str):
+            raise AIResponseError("AI response could not be parsed as JSON")
+        start, end = raw.find("{"), raw.rfind("}")  # also skips ```json fences
+        try:
+            data = json.loads(raw[start:end + 1]) if 0 <= start < end else None
+        except json.JSONDecodeError:
+            data = None
+        if not isinstance(data, dict):
+            raise AIResponseError("AI response could not be parsed as JSON")
+        return data
 
-#------------------------------------------------------------
-#Breaking down the response to Python dictionary
-#------------------------------------------------------------
-def parse_response(raw: Optional[str]) -> Optional[dict]:
-    if not raw or not isinstance(raw, str):
-        logger.error("Nothing to parse from the AI response.")
-        return None
+    def validate(self, data: dict) -> dict:
+        """Check keys, types and ranges, then return a clean copy."""
+        for key, expected in self.SCHEMA.items():
+            if key not in data or not self._is_type(data[key], expected):
+                logger.error("Bad or missing key '%s': %r", key, data.get(key))
+                raise AIResponseError("AI response failed schema validation")
+        if not 1 <= data["severity"] <= 5 or not 0 <= data["confidence"] <= 1:
+            raise AIResponseError("AI response failed schema validation")
 
-    text = raw.strip()
-    if text.startswith("'''"):
-        text = text.strip("'")
-        if text.lower().startswith("json"):
-            text = text[4:]
-        text = text.strip()
+        clean = {key: data[key] for key in self.SCHEMA}
+        for key in ("machine_subsystem", "root_cause_hypothesis", "recommended_action"):
+            clean[key] = clean[key].strip()
+        clean["confidence"] = round(float(clean["confidence"]), 2)
+        return clean
 
-    start = text.find("{")
-    end = text.rfind("}") #reverse find
-    if start == -1 or end == -1 or end < start:
-        logger.error("No JSON object found in the AI response: %r",raw[:120])
-        return None
+    @staticmethod
+    def _is_type(value, expected) -> bool:
+        if isinstance(value, bool):          # bool counts as int in Python
+            return expected is bool
+        if expected is float:
+            return isinstance(value, (int, float))
+        if expected is str:
+            return isinstance(value, str) and value.strip() != ""
+        return isinstance(value, expected)
 
-    try:
-        parsed = json.loads(text[start:end +1])
-    except json.JSONDecodeError as error:
-        logger.error("AI response was not a valid JSON value: %s", error)
-        return None
-    if not isinstance(parsed, dict):
-        logger.error("AI response parsed to %s, expected an object", type(parsed).__name__)
-        return None
-    return parsed
 
-#------------------------------------------------------------
-#Validate response so that bad data doesn't reach data_manager
-#------------------------------------------------------------
-def validate_response(data: Optional[dict]) -> bool:
-    if not isinstance(data, dict):
-        logger.error("Validation failed: response is not a dictionary.")
-        return False
+# ---------------- AI Manager ----------------
+class AIManager:
+    def __init__(self, client: AIClient, max_attempts: int = 3, backoff_seconds: float = 2):
+        self._client = client                  # association: passed in from outside
+        self._prompts = PromptBuilder()        # composition: created and owned here
+        self._validator = ResponseValidator()  # composition
+        self._max_attempts = max_attempts
+        self._backoff = backoff_seconds
 
-    for key, expected_type in response_schema.items():
-        if key not in data:
-            logger.error("Validation failed: missing required key '%s'", key)
-            return False
+    def enrich_record(self, record: dict) -> dict:
+        """Return a copy of the record with "ai" results, or "ai_error" on failure."""
+        enriched = dict(record)
+        prompt = self._prompts.build(record)
+        last_error = "unknown failure"
 
-        value = data[key]
+        for attempt in range(1, self._max_attempts + 1):
+            try:
+                raw = self._client.complete(PromptBuilder.SYSTEM_PROMPT, prompt)
+                enriched["ai"] = self._validator.validate(self._validator.parse(raw))
+                enriched.pop("ai_error", None)
+                return enriched
+            except AIConfigError as error:
+                last_error = str(error)
+                break                                     # no point retrying
+            except AIConnectionError as error:
+                logger.warning("Attempt %d failed: %s", attempt, error)
+                last_error = "AI API unreachable or returned an error"
+            except AIResponseError as error:
+                logger.warning("Attempt %d failed: %s", attempt, error)
+                last_error = str(error)
+            if attempt < self._max_attempts:
+                time.sleep(self._backoff * attempt)
 
-        if expected_type is bool:
-            if not isinstance(value, bool):
-                logger.error("Validation failed: '%s' must be a boolean, got %r", key, value)
-                return False
-        elif expected_type is int:
-            if isinstance(value, bool) or not isinstance(value, int):
-                logger.error("Validation failed: '%s' must be a integer, got %r", key, value)
-                return False
-        elif expected_type is float:
-            if isinstance(value, bool):
-                logger.error("Validation failed: '%s' must be a number, got %r", key, value)
-                return False
-        elif expected_type is str:
-            if not isinstance(value, str) or not value.strip():
-                logger.error("Validation failed: '%s' must be a non-empty string", key)
-                return False
-
-    severity = data["severity"]
-    if not SEVERITY_MAX >= severity >= SEVERITY_MIN:
-        logger.error("Validation failed: severity %s outside %d-%d",
-                     severity, SEVERITY_MIN, SEVERITY_MAX)
-        return False
-    confidence = data["confidence"]
-    if not CONFIDENCE_MIN <= confidence <= CONFIDENCE_MAX:
-        logger.error("Validation failed: confidence %s outside %.1f-%.1f",
-                     confidence, CONFIDENCE_MIN, CONFIDENCE_MAX)
-        return False
-    return True
-
-#------------------------------------------------------------
-#Build a clean copy and return it 
-#------------------------------------------------------------
-def normalize_response(data: dict) -> dict:
-    return {
-        "machine_subsystem": data["machine_subsystem"].strip(),
-        "severity": int(data["severity"]),
-        "root_cause_hypothesis": data["root_cause_hypothesis"].strip(),
-        "patient_safety_risk": bool(data["patient_safety_risk"]),
-        "recurrence_indicator": bool(data["recurrence_indicator"]),
-        "recommended_action": data["recommended_action"].strip(),
-        "confidence": round(float(data["confidence"]), 2),
-        }
-
-#------------------------------------------------------------
-#Returns a copy of either the AI results or an error
-#------------------------------------------------------------
-def enrich_record(record: dict) -> dict:
-    enriched = dict(record)
-
-    if not AI_API_KEY:
         enriched["ai"] = None
-        enriched["ai_error"] = "AI_API_KEY is not configured"
-        logger.error("Record %s not enriched: AI_API_KEY is not configured",
-                     record.get("log_id"))
+        enriched["ai_error"] = last_error
+        logger.error("Record %s not enriched: %s", record.get("log_id"), last_error)
         return enriched
 
-    prompt = build_prompt(record)
-    last_error = "unknown failure"
 
-    for attempt in range(1, MAX_ATTEMPTS + 1):
-        raw = call_api(prompt)
-        if raw is None:
-            last_error = "AI API unreachable or returned an error"
-        else:
-            parsed = parse_response(raw)
-            if parsed is None:
-                last_error = "AI response could not be parsed as JSON"
-            elif not validate_response(parsed):
-                last_error = "AI response failed schema validation"
-            else:
-                enriched["ai"] = normalize_response(parsed)
-                enriched.pop("ai_error", None)
-                logger.info("Record %s enriched on attempt %d",
-                            record.get("log_id"), attempt)
-                return enriched
-        logger.warning("Attempt %d/%d failed for record %s: %s",
-                       attempt, MAX_ATTEMPTS, record.get("log_id"), last_error)
-        if attempt < MAX_ATTEMPTS:
-            time.sleep(RETRY_BACKOFF_SECONDS * attempt)
+# Keeps teammates' existing `enrich_record(record)` calls working
+def enrich_record(record: dict) -> dict:
+    return AIManager(GeminiClient()).enrich_record(record)
 
-    enriched["ai"] = None
-    enriched["ai_error"] = last_error
-    logger.error("Record %s could not be enriched: %s", record.get("log_id"), last_error)
-    return enriched
+
+if __name__ == "__main__":
+    sample = {
+        "machine_id": "MACHINE_001",
+        "machine_type": "Infusion Pump",
+        "timestamp": "2026-10-03 21:30:05",
+        "raw_message": "Temperature exceeded 90°C",
+    }
+    manager = AIManager(GeminiClient())
+    print(json.dumps(manager.enrich_record(sample), indent=2, ensure_ascii=False))

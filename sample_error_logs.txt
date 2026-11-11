@@ -1,0 +1,7 @@
+# timestamp | machine_id | error_code | machine_type | raw_message
+2026-10-08 21:30:05 | CT-114 | E102 | CT scanner | Gantry temperature exceeded 90C, scan aborted
+2026-10-08 21:33:10 | CT-114 | E102 | CT scanner | Gantry temperature exceeded 90C, scan aborted
+2026-10-08 21:36:40 | CT-114 | E102 | CT scanner | Gantry temperature exceeded 90C, scan aborted
+2026-10-08 22:10:00 | XR-205 | E210 | X-ray machine | Control panel backlight flickering
+2026-10-09 02:15:30 | CT-114 | E305 | CT scanner | Detector calibration drift detected again, 4th time today
+2026-10-09 03:00:00 | MACHINE_001 | E999 | X-ray machine | Unknown fault, no further details
