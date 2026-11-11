@@ -88,4 +88,27 @@ class TriagePipeline:
                             f"could not be saved for {log.log_id}."
                         )
             self._view.display_result(log)
-        return processed       
+        return processed
+    
+    def apply_review(self, log: ErrorLog, severity: int, safety_risk: bool,
+                         source: str) -> bool:
+        """Store a human assessment, re-run the rules, and alert if now urgent."""
+        log.record_human_review(severity, safety_risk, source)
+        self._engine.evaluate(log)
+        if not self._repository.save(log):
+            self._view.display_error(
+                f"Could not save review for {log.log_id}; no alert was sent.")
+            return False
+
+        self._view.display_message(
+            f"Human assessment saved: severity {severity}/5; "
+            f"patient-safety risk {'yes' if safety_risk else 'no'}."
+        )
+        if self._scheduler.should_send_now(log):
+            self._send_urgent_alert(log)
+            if not self._repository.save(log):
+                self._view.display_error(
+                    f"Could not save notification status for {log.log_id}.")
+        else:
+            self._view.display_message(f"Updated triage route: {log.decision.route}.")
+        return True
