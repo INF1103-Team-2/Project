@@ -27,6 +27,8 @@ from io_manager_telegram_notifier import TelegramNotifier
 from logic_manager_alert_scheduler import AlertScheduler
 from logic_manager_fleet_analyzer import FleetAnalyzer
 from logic_manager_triage_engine import TriageEngine
+from main_triage_app import TriageApp
+from main_triage_pipeline import TriagePipeline
 
 LOG_DIR = "logs"
 LOG_FILE = os.path.join(LOG_DIR, "app.log")
@@ -68,7 +70,45 @@ def build_share() -> dict:
         ),
     }
 
+def build_pipeline(view: OutputView, screen_notifier: Notifier, shared: dict) -> TriagePipeline:
+    return TriagePipeline(
+        view = view,
+        ai = shared["ai"],
+        engine = TriageEngine(),
+        scheuler = AlertScheduler(),
+        respository = shared["respository"],
+        notifiers = [screen_notifier, shared ["telegram"]],     #Screen first followed by telegram
+        telegram = shared["telegram"],
+    )
 
+def build_console_app() -> TriageApp:
+    shared = build_share()
+    ui = ConsoleUI()
+    return TriageApp(
+        ui = ui,
+        reader = LogFileReader(),
+        pipeline = build_pipeline(ui, ConsoleNotifier(ui), shared),
+        repository = shared["repository"],
+        analyzer = FleetAnalyzer(),
+        report_manager = shared["report_manager"],
+    )
+
+def build_gui_app():
+    """Imported lazy so that the CLI and Docker dont need Tkinter"""
+    from io_manager_gui_notifier import GuiNotifier
+    from io_manager_gui_window import GuiWindow
+    from main_gui_app import GuiApp
+
+    shared = build_share()
+    window = GuiWindow()
+    return GuiApp(
+        window = window,
+        reader = LogFileReader(),
+        pipeline = build_pipeline(window, GuiNotifier(window), shared),
+        repository = shared["repository"],
+        analyzer = FleetAnalyzer(),
+        report_manager = shared["report_manager"],
+    )
 
 def main() -> None:
     load_dotenv
