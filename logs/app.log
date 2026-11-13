@@ -35,3 +35,8 @@
 2026-11-07 03:07:13,958 INFO     logic_manager_triage_engine Record 75d1133224e0 routed to immediate_escalation with score 90
 2026-11-07 03:07:13,959 INFO     io_manager_gui_notifier Alert shown in GUI for 75d1133224e0
 2026-11-07 03:07:15,094 INFO     io_manager_telegram_notifier Telegram message sent
+2026-11-13 11:47:25,517 INFO     main_triage_app Application started
+2026-11-13 11:47:27,073 INFO     io_manager_telegram_notifier Telegram message sent
+2026-11-13 11:48:42,283 INFO     main_gui_app   GUI started
+2026-11-13 11:49:01,334 INFO     main_triage_app Application started
+2026-11-13 11:49:10,510 INFO     main_gui_app   GUI started
