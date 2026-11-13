@@ -7,6 +7,7 @@ ENV PYTHONUNBUFFERED=1
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py logic_manager.py io_manager.py ai_manager.py data_manager.py test_logic.py ./
+# One class per file: main.py + every manager file + the tests
+COPY main.py main_*.py io_manager_*.py ai_manager_*.py logic_manager_*.py data_manager_*.py test_logic.py ./
 
 CMD ["python", "main.py"]

@@ -14,7 +14,7 @@ import sys
 from dotenv import load_dotenv
 
 from ai_manager_ai_client import AIClient
-from data_manager_phase2 import RecordRepository
+from data_manager_record_repository import RecordRepository
 from io_manager_console_notifier import ConsoleNotifier
 from io_manager_console_ui import ConsoleUI
 from io_manager_html_report_formatter import HTMLReportFormatter
@@ -50,79 +50,86 @@ def configure_logging() -> None:
     if not handlers:
         logging.disable(logging.CRITICAL)
 
-def build_share() -> dict:
-    """Onjects that both fron ends use"""
+
+def build_shared() -> dict:
+    """Objects both front ends use."""
     return {
         "telegram": TelegramNotifier(
-            token = os.getenv("TELEGRAM_BOT_TOKEN", ""),
-            chat_id = os.getenv("TELEGRAMCHAT_ID", ""),
+            token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
+            chat_id=os.getenv("TELEGRAM_CHAT_ID", ""),
         ),
         "ai": AIClient(
-            base_url = os.getenv("AI_BASE_URL", 
-                                 "https://generativelanguage.googleapis.com/v1beta/openai"),
-            model = os.getenv("AI_MODEL", "gemini-2.0-flash"),
-            api_key = os.getenv("AI_API_KEY", ""),
+            base_url=os.getenv("AI_BASE_URL",
+                               "https://generativelanguage.googleapis.com/v1beta/openai"),
+            model=os.getenv("AI_MODEL", "gemini-2.0-flash"),
+            api_key=os.getenv("AI_API_KEY", ""),
         ),
         "repository": RecordRepository(os.getenv("DATA_FILE", "processed_records.json")),
         "report_manager": ReportManager(
-            output_dir = os.getenv("REPORT_DIR", "reports"),
-            formatters = [HTMLReportFormatter(), MarkdownReportFormatter()],
+            output_dir=os.getenv("REPORT_DIR", "reports"),
+            formatters=[HTMLReportFormatter(), MarkdownReportFormatter()],
         ),
     }
 
+
 def build_pipeline(view: OutputView, screen_notifier: Notifier, shared: dict) -> TriagePipeline:
     return TriagePipeline(
-        view = view,
-        ai = shared["ai"],
-        engine = TriageEngine(),
-        scheuler = AlertScheduler(),
-        respository = shared["respository"],
-        notifiers = [screen_notifier, shared ["telegram"]],     #Screen first followed by telegram
-        telegram = shared["telegram"],
+        view=view,
+        ai=shared["ai"],
+        engine=TriageEngine(),
+        scheduler=AlertScheduler(),
+        repository=shared["repository"],
+        notifiers=[screen_notifier, shared["telegram"]],   # screen first, then Telegram
+        telegram=shared["telegram"],
     )
 
-def build_console_app() -> TraigeApp:
-    shared = build_share()
+
+def build_console_app() -> TriageApp:
+    shared = build_shared()
     ui = ConsoleUI()
-    return TraigeApp(
-        ui = ui,
-        reader = LogFileReader(),
-        pipeline = build_pipeline(ui, ConsoleNotifier(ui), shared),
-        repository = shared["repository"],
-        analyzer = FleetAnalyzer(),
-        report_manager = shared["report_manager"],
+    return TriageApp(
+        ui=ui,
+        reader=LogFileReader(),
+        pipeline=build_pipeline(ui, ConsoleNotifier(ui), shared),
+        repository=shared["repository"],
+        analyzer=FleetAnalyzer(),
+        report_manager=shared["report_manager"],
     )
+
+
 
 def build_gui_app():
-    """Imported lazy so that the CLI and Docker dont need Tkinter"""
+    """Imported lazily so the CLI (and Docker) never needs Tkinter."""
     from io_manager_gui_notifier import GuiNotifier
     from io_manager_gui_window import GuiWindow
     from main_gui_app import GuiApp
 
-    shared = build_share()
+    shared = build_shared()
     window = GuiWindow()
     return GuiApp(
-        window = window,
-        reader = LogFileReader(),
-        pipeline = build_pipeline(window, GuiNotifier(window), shared),
-        repository = shared["repository"],
-        analyzer = FleetAnalyzer(),
-        report_manager = shared["report_manager"],
+        window=window,
+        reader=LogFileReader(),
+        pipeline=build_pipeline(window, GuiNotifier(window), shared),
+        repository=shared["repository"],
+        analyzer=FleetAnalyzer(),
+        report_manager=shared["report_manager"],
     )
 
+
 def main() -> None:
-    load_dotenv
+    load_dotenv()          # AI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID from .env
     configure_logging()
     if "--gui" in sys.argv[1:]:
         try:
             app = build_gui_app()
         except ImportError:
-            print("The GUI needs Tkinter, which is not installed here"
+            print("The GUI needs Tkinter, which is not installed here "
                   "(e.g. inside Docker). Run 'python main.py' for the menu.")
             return
         app.run()
     else:
-        build_console_app.run()
+        build_console_app().run()
+
 
 if __name__ == "__main__":
     main()
