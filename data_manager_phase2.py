@@ -2,7 +2,7 @@ import json
 import os
 from typing import Callable
 
-from logic_manager_ErrorLog import ErrorLog
+from logic_manager_error_log import ErrorLog
 
 
 class RecordRepository:
