@@ -27,7 +27,7 @@ from io_manager_telegram_notifier import TelegramNotifier
 from logic_manager_alert_scheduler import AlertScheduler
 from logic_manager_fleet_analyzer import FleetAnalyzer
 from logic_manager_triage_engine import TriageEngine
-from main_triage_app import TriageApp
+from main_triage_app import TraigeApp
 from main_triage_pipeline import TriagePipeline
 
 LOG_DIR = "logs"
@@ -81,10 +81,10 @@ def build_pipeline(view: OutputView, screen_notifier: Notifier, shared: dict) ->
         telegram = shared["telegram"],
     )
 
-def build_console_app() -> TriageApp:
+def build_console_app() -> TraigeApp:
     shared = build_share()
     ui = ConsoleUI()
-    return TriageApp(
+    return TraigeApp(
         ui = ui,
         reader = LogFileReader(),
         pipeline = build_pipeline(ui, ConsoleNotifier(ui), shared),
