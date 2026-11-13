@@ -1,100 +1,128 @@
-"""Minimal offline tests for core logic_manager functions.
+"""Offline tests for the Phase 2 (OOP) classes.
 
 Run with: python test_logic.py
-AI assessments and Telegram HTTP calls are mocked; no live Telegram messages
-are sent by this test script.
+AI and Telegram are mocked; no live network calls are made.
 """
 
+import logging
 import os
+import tempfile
 from datetime import datetime
 from pprint import pformat
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-import io_manager as io
-import logic_manager as lm
-import main
-
+import io_manager_telegram_notifier as telegram_module
+from ai_manager_ai_client import AIClient
+from data_manager_record_repository import RecordRepository
+from io_manager_console_ui import ConsoleUI
+from io_manager_telegram_notifier import TelegramNotifier
+from logic_manager_ai_assessment import AIAssessment
+from logic_manager_alert_scheduler import AlertScheduler
+from logic_manager_error_log import ErrorLog
+from logic_manager_fleet_analyzer import FleetAnalyzer
+from logic_manager_triage_engine import TriageEngine
+from io_manager_html_report_formatter import HTMLReportFormatter
+from io_manager_markdown_report_formatter import MarkdownReportFormatter
+from io_manager_report_manager import ReportManager
+from main_triage_app import TriageApp
+from main_triage_pipeline import TriagePipeline
 
 TEST_TIME = datetime(2026, 10, 9, 10, 43, 0)
-
-URGENT_RECORD = {
-    "log_id": "test-urgent",
-    "machine_id": "CT-114",
-    "ai": {
-        "severity": 5,
-        "patient_safety_risk": True,
-        "recurrence_indicator": False,
-        "confidence": 0.95,
-    },
-}
-REVIEW_RECORD = {
-    "log_id": "test-review",
-    "machine_id": "CT-114",
-    "ai": {
-        "severity": 5,
-        "patient_safety_risk": False,
-        "recurrence_indicator": False,
-        "confidence": 0.4,
-    },
-}
-DEFERRED_RECORD = {
-    "log_id": "test-deferred",
-    "machine_id": "XR-008",
-    "ai": {
-        "severity": 3,
-        "patient_safety_risk": False,
-        "recurrence_indicator": True,
-        "confidence": 0.9,
-    },
-}
+ENGINE = TriageEngine()
+SCHEDULER = AlertScheduler()
 
 
-def test_process_record() -> None:
-    records = {
-        "urgent": lm.process_record(URGENT_RECORD, now=TEST_TIME),
-        "human review": lm.process_record(REVIEW_RECORD, now=TEST_TIME),
-        "deferred": lm.process_record(DEFERRED_RECORD, now=TEST_TIME),
-    }
-    decisions = {name: record["decision"] for name, record in records.items()}
-    print("process_record decisions:")
+def make_log(log_id: str, machine_id: str, severity=None, safety=False,
+             recurring=False, confidence=0.9, timestamp="2026-10-09T10:43:00") -> ErrorLog:
+    """Build an ErrorLog with an AI assessment (or none if severity is None)."""
+    log = ErrorLog(machine_id, "E102", "CT scanner", timestamp, "test",
+                   "test message text", log_id=log_id)
+    if severity is not None:
+        log.set_ai_assessment(AIAssessment("subsystem", severity, "cause", safety,
+                                           recurring, "action", confidence))
+    return log
+
+
+def urgent() -> ErrorLog:
+    return make_log("test-urgent", "CT-114", 5, safety=True, confidence=0.95)
+
+
+def needs_review() -> ErrorLog:
+    return make_log("test-review", "CT-114", 5, confidence=0.4)
+
+
+def deferred() -> ErrorLog:
+    return make_log("test-deferred", "XR-008", 3, recurring=True, confidence=0.9)
+
+
+def evaluated(log: ErrorLog) -> ErrorLog:
+    ENGINE.evaluate(log, now=TEST_TIME)
+    return log
+
+
+def make_pipeline(**overrides) -> TriagePipeline:
+    """A TriagePipeline whose collaborators are all mocks unless overridden."""
+    parts = dict(view=MagicMock(), ai=MagicMock(), engine=ENGINE, scheduler=SCHEDULER,
+                 repository=MagicMock(), notifiers=[], telegram=MagicMock())
+    parts.update(overrides)
+    return TriagePipeline(**parts)
+
+
+def make_app(ui, repository, pipeline) -> TriageApp:
+    return TriageApp(ui=ui, reader=MagicMock(), pipeline=pipeline, repository=repository,
+                     analyzer=FleetAnalyzer(), report_manager=MagicMock())
+
+
+# ---------------------------------------------------------------------------
+def test_evaluate() -> None:
+    logs = {"urgent": evaluated(urgent()), "human review": evaluated(needs_review()),
+            "deferred": evaluated(deferred())}
+    decisions = {name: log.decision.to_dict() for name, log in logs.items()}
+    print("evaluate decisions:")
     print(pformat(decisions))
     assert decisions["urgent"] == {
-        "route": lm.ROUTE_IMMEDIATE,
+        "route": TriageEngine.ROUTE_IMMEDIATE,
         "score": 90,
         "notify_now": True,
         "scheduled_send_time": "2026-10-09T10:43:00",
         "requires_human_review": False,
         "rules_fired": ["R1_confident_high_severity_safety_risk"],
     }
-    assert decisions["human review"]["route"] == lm.ROUTE_HUMAN_TRIAGE
+    assert decisions["human review"]["route"] == TriageEngine.ROUTE_HUMAN_TRIAGE
     assert decisions["human review"]["requires_human_review"] is True
-    assert decisions["deferred"]["route"] == lm.ROUTE_RECURRING
+    assert decisions["deferred"]["route"] == TriageEngine.ROUTE_RECURRING
     assert decisions["deferred"]["scheduled_send_time"] == "2026-10-10T07:00:00"
-    assert "decision" not in URGENT_RECORD
 
 
-def test_malformed_ai_assessment() -> None:
-    malformed_record = {
-        **URGENT_RECORD,
-        "ai": {**URGENT_RECORD["ai"], "severity": "high"},
-    }
-    decision = lm.evaluate(malformed_record, now=TEST_TIME)
+def test_invalid_assessment_is_rejected() -> None:
+    """Encapsulation: an Assessment with a bad severity can't even be created."""
+    try:
+        AIAssessment("subsystem", "high", "cause", True, False, "action", 0.95)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid severity was accepted")
 
-    assert lm.score(malformed_record) == 0
-    assert lm.route(malformed_record) == lm.ROUTE_AI_UNAVAILABLE
-    assert lm.rules_fired(malformed_record) == ["R0_ai_unavailable"]
-    assert decision["route"] == lm.ROUTE_AI_UNAVAILABLE
-    assert decision["score"] == 0
-    assert decision["requires_human_review"] is True
+    log = evaluated(make_log("no-ai", "CT-114"))      # no AI assessment at all
+    assert log.decision.route == TriageEngine.ROUTE_AI_UNAVAILABLE
+    assert log.decision.score == 0
+    assert log.decision.rules_fired == ["R0_ai_unavailable"]
+    assert log.decision.requires_human_review is True
+
+
+def test_human_assessment_overrides_ai() -> None:
+    """Polymorphism/LSP: the engine treats a HumanAssessment like an AIAssessment."""
+    log = needs_review()
+    log.record_human_review(severity=5, safety_risk=True, source="human_assessed")
+    evaluated(log)
+    assert log.effective_assessment().confidence() == 1.0
+    assert log.decision.route == TriageEngine.ROUTE_IMMEDIATE
+    assert log.decision.rules_fired[0] == "R6_human_assessment_approved"
 
 
 def test_summarise() -> None:
-    records = [
-        lm.process_record(URGENT_RECORD, now=TEST_TIME),
-        lm.process_record(REVIEW_RECORD, now=TEST_TIME),
-    ]
-    summary = lm.summarise(records)
+    summary = FleetAnalyzer().summarise([evaluated(urgent()), evaluated(needs_review())])
     print("summarise result:")
     print(pformat(summary))
     assert summary == {
@@ -102,273 +130,302 @@ def test_summarise() -> None:
         "safety_risk_count": 1,
         "human_review_count": 1,
         "mean_score": 72.5,
-        "by_route": {
-            lm.ROUTE_IMMEDIATE: 1,
-            lm.ROUTE_HUMAN_TRIAGE: 1,
-        },
+        "by_route": {TriageEngine.ROUTE_IMMEDIATE: 1, TriageEngine.ROUTE_HUMAN_TRIAGE: 1},
         "repeat_offenders": [("CT-114", 2)],
     }
-    assert lm.summarise([])["total"] == 0
+    assert FleetAnalyzer().summarise([])["total"] == 0
+
+
+def test_json_round_trip() -> None:
+    """to_dict() / from_dict() keep the Phase 1 JSON format unchanged."""
+    log = evaluated(urgent())
+    log.decision.mark_sent()
+    assert ErrorLog.from_dict(log.to_dict()).to_dict() == log.to_dict()
+
+    with tempfile.TemporaryDirectory() as folder:
+        repository = RecordRepository(os.path.join(folder, "records.json"))
+        assert repository.load_all() == []
+        assert repository.save(log) is True
+        assert repository.save(log) is True              # replaced, not duplicated
+        assert len(repository.load_all()) == 1
+        assert repository.get("test-urgent").decision.notification_sent is True
 
 
 def test_send_telegram() -> None:
     text = "Offline test alert"
-    token = "test-token"
-    chat_id = "12345"
     results = {}
-
-    with patch.dict(os.environ, {
-        "TELEGRAM_BOT_TOKEN": "",
-        "TELEGRAM_CHAT_ID": "",
-    }), patch.object(io.logger, "warning"), \
-            patch.object(io.requests, "post") as post:
-        results["missing config"] = io.send_telegram(text)
+    with patch.object(telegram_module.requests, "post") as post:
+        results["missing config"] = TelegramNotifier("", "")._post(text)
         post.assert_not_called()
 
-    success_response = SimpleNamespace(
-        status_code=200,
-        text='{"ok":true}',
-        json=lambda: {"ok": True, "result": {"message_id": 1}},
-    )
-    with patch.dict(os.environ, {
-        "TELEGRAM_BOT_TOKEN": token,
-        "TELEGRAM_CHAT_ID": chat_id,
-    }), patch.object(io.requests, "post", return_value=success_response) as post:
-        results["simulated success"] = io.send_telegram(text)
+    notifier = TelegramNotifier("test-token", "12345")
+    success = SimpleNamespace(status_code=200, text='{"ok":true}',
+                              json=lambda: {"ok": True, "result": {"message_id": 1}})
+    with patch.object(telegram_module.requests, "post", return_value=success) as post:
+        results["simulated success"] = notifier._post(text)
         post.assert_called_once_with(
-            io.TELEGRAM_URL.format(token=token),
-            data={"chat_id": chat_id, "text": text},
-            timeout=10,
-        )
+            TelegramNotifier.TELEGRAM_URL.format(token="test-token"),
+            data={"chat_id": "12345", "text": text}, timeout=10)
 
-    error_response = SimpleNamespace(status_code=503, text="service unavailable")
-    with patch.dict(os.environ, {
-        "TELEGRAM_BOT_TOKEN": token,
-        "TELEGRAM_CHAT_ID": chat_id,
-    }), patch.object(io.requests, "post", return_value=error_response), \
-            patch.object(io.logger, "error"):
-        results["simulated HTTP error"] = io.send_telegram(text)
+    error = SimpleNamespace(status_code=503, text="service unavailable")
+    with patch.object(telegram_module.requests, "post", return_value=error):
+        results["simulated HTTP error"] = notifier._post(text)
 
-    rejected_response = SimpleNamespace(
-        status_code=200,
-        text='{"ok":false,"description":"bot was blocked by the user"}',
-        json=lambda: {"ok": False, "description": "bot was blocked by the user"},
-    )
-    with patch.dict(os.environ, {
-        "TELEGRAM_BOT_TOKEN": token,
-        "TELEGRAM_CHAT_ID": chat_id,
-    }), patch.object(io.requests, "post", return_value=rejected_response), \
-            patch.object(io.logger, "error"):
-        results["Telegram rejection in HTTP 200"] = io.send_telegram(text)
+    rejected = SimpleNamespace(
+        status_code=200, text="",
+        json=lambda: {"ok": False, "description": "bot was blocked by the user"})
+    with patch.object(telegram_module.requests, "post", return_value=rejected):
+        results["Telegram rejection in HTTP 200"] = notifier._post(text)
 
     assert results == {
         "missing config": (False, "DRY RUN (Telegram not configured)"),
         "simulated success": (True, "Sent"),
         "simulated HTTP error": (False, "Telegram error 503"),
         "Telegram rejection in HTTP 200": (
-            False,
-            "Telegram rejected the message: bot was blocked by the user",
-        ),
+            False, "Telegram rejected the message: bot was blocked by the user"),
     }
 
 
 def test_telegram_message_builders() -> None:
-    review_text = io.build_human_review_message(
-        {"log_id": "abc123", "machine_id": "CT-114"}
-    )
-    assert "A record needs human review" in review_text
-    assert "Please check the CLI" in review_text
-    assert "CT-114" in review_text
-    assert "abc123" in review_text
+    notifier = TelegramNotifier("t", "c")
+    sent = []
+    notifier._post = lambda text: (sent.append(text), (True, "Sent"))[1]
 
-    alert_text = io.build_alert_message({
-        "log_id": "urgent-1",
-        "machine_id": "CT-114",
-        "machine_type": "CT scanner",
-        "decision": {"notify_now": True, "score": 90},
-        "ai": {"severity": 5, "patient_safety_risk": True},
-    })
-    assert "URGENT MACHINE ERROR" in alert_text
-    assert "CT-114" in alert_text
+    notifier.send_review_request(make_log("abc123", "CT-114"))
+    assert "A record needs human review" in sent[-1]
+    assert "Please check the CLI" in sent[-1]
+    assert "CT-114" in sent[-1] and "abc123" in sent[-1]
 
-    report_text = io.build_daily_report([{
-        "machine_id": "XR-008",
-        "ai": {"severity": 3, "machine_subsystem": "cooling"},
-        "decision": {"route": "recurring_fault_review"},
-    }])
-    assert "DAILY MACHINE REPORT (1 item(s))" in report_text
-    assert "XR-008" in report_text
+    assert notifier.notify_urgent(evaluated(urgent())) == (True, "Telegram: Sent")
+    assert "URGENT MACHINE ERROR" in sent[-1] and "CT-114" in sent[-1]
+
+    notifier.send_daily_report([evaluated(deferred())])
+    assert "DAILY MACHINE REPORT (1 item(s))" in sent[-1]
+    assert "XR-008" in sent[-1]
 
 
 def test_manual_review_recalculates_and_escalates() -> None:
-    record = lm.process_record(
-        {
-            "log_id": "test-review",
-            "machine_id": "CT-114",
-            "machine_type": "CT scanner",
-            "ai": None,
-            "ai_error": "AI assessment unavailable",
-        },
-        now=datetime(2026, 10, 9, 10, 43),
-    )
+    log = evaluated(make_log("test-review", "CT-114"))   # AI unavailable
+    ui = MagicMock()
+    ui.prompt_review_action.return_value = "Enter severity manually"
+    ui.prompt_review_severity.return_value = 5
+    ui.prompt_review_safety_risk.return_value = True
+    repository = MagicMock()
+    repository.query.return_value = [log]
+    repository.save.return_value = True
+    pipeline = make_pipeline(view=ui, repository=repository)
+    app = make_app(ui=ui, repository=repository, pipeline=pipeline)
 
-    with patch.object(main.data_manager, "query", return_value=[record]), \
-            patch.object(main.data_manager, "add_record", return_value=True) as save, \
-            patch.object(main.io_manager, "display_record") as display, \
-            patch.object(main.io_manager, "display_message"), \
-            patch.object(main.io_manager, "prompt_review_action",
-                         return_value="Enter severity manually"), \
-            patch.object(main.io_manager, "prompt_review_severity", return_value=5), \
-            patch.object(main.io_manager, "prompt_review_safety_risk", return_value=True), \
-            patch.object(main, "send_urgent_alert", side_effect=lambda item: item) as alert:
-        main.handle_review_queue()
+    with patch.object(pipeline, "_send_urgent_alert") as alert:
+        app._handle_review_queue()
 
-    updated = save.call_args_list[0].args[0]
-    assert display.call_count == 1
-    assert updated["ai"] is None
-    assert updated["human_review"]["severity"] == 5
-    assert updated["human_review"]["patient_safety_risk"] is True
-    assert updated["decision"]["route"] == lm.ROUTE_IMMEDIATE
-    assert updated["decision"]["requires_human_review"] is False
+    assert ui.display_record.call_count == 1
+    assert log.ai_assessment is None
+    assert log.human_assessment.severity == 5
+    assert log.human_assessment.patient_safety_risk is True
+    assert log.decision.route == TriageEngine.ROUTE_IMMEDIATE
+    assert log.decision.requires_human_review is False
     assert alert.call_count == 1
-    assert save.call_count == 2
+    assert repository.save.call_count == 2
 
 
 def test_process_batch_sends_human_review_notification() -> None:
-    record = {
-        "log_id": "new-review",
-        "machine_id": "CT-114",
-        "machine_type": "CT scanner",
-        "error_code": "E102",
-        "timestamp": "2026-10-09T10:43:00",
-        "ai": {
-            "severity": 3,
-            "patient_safety_risk": False,
-            "recurrence_indicator": False,
-            "confidence": 0.4,
-        },
-    }
+    log = make_log("new-review", "CT-114", 3, confidence=0.4)
+    repository = MagicMock()
+    repository.load_all.return_value = []
+    repository.save.return_value = True
+    telegram = MagicMock()
+    telegram.send_review_request.return_value = (True, "Sent")
+    pipeline = make_pipeline(repository=repository, telegram=telegram)
 
-    with patch.object(main.data_manager, "load_records", return_value=[]), \
-            patch.object(main.ai_manager, "enrich_record", side_effect=lambda item: item), \
-            patch.object(main.data_manager, "add_record", return_value=True) as save, \
-            patch.object(main.io_manager, "send_telegram",
-                         return_value=(True, "Sent")) as send, \
-            patch.object(main.io_manager, "display_message"), \
-            patch.object(main.io_manager, "display_result"):
-        processed = main.process_batch([record], datetime(2026, 10, 9, 10, 43))
+    processed = pipeline.process_batch([log], TEST_TIME)
 
-    assert send.call_count == 1
-    assert "A record needs human review" in send.call_args.args[0]
-    assert "Please check the CLI" in send.call_args.args[0]
-    assert "new-review" in send.call_args.args[0]
-    assert processed[0]["decision"]["requires_human_review"] is True
-    assert processed[0]["decision"]["human_review_notification_sent"] is True
-    assert save.call_count == 2
+    assert telegram.send_review_request.call_count == 1
+    assert processed[0].decision.requires_human_review is True
+    assert processed[0].decision.review_notification_sent is True
+    assert repository.save.call_count == 2
 
 
 def test_process_batch_does_not_repeat_review_notification() -> None:
-    record = {
-        "log_id": "already-notified",
-        "machine_id": "CT-114",
-        "machine_type": "CT scanner",
-        "error_code": "E102",
-        "timestamp": "2026-10-09T10:43:00",
-        "ai": {
-            "severity": 3,
-            "patient_safety_risk": False,
-            "recurrence_indicator": False,
-            "confidence": 0.4,
-        },
-    }
-    stored = {
-        **record,
-        "decision": {"human_review_notification_sent": True},
-    }
+    log = make_log("already-notified", "CT-114", 3, confidence=0.4)
+    stored = ErrorLog.from_dict({**log.to_dict(),
+                                 "decision": {"human_review_notification_sent": True}})
+    repository = MagicMock()
+    repository.load_all.return_value = [stored]
+    repository.save.return_value = True
+    telegram = MagicMock()
+    pipeline = make_pipeline(repository=repository, telegram=telegram)
 
-    with patch.object(main.data_manager, "load_records", return_value=[stored]), \
-            patch.object(main.ai_manager, "enrich_record", side_effect=lambda item: item), \
-            patch.object(main.data_manager, "add_record", return_value=True), \
-            patch.object(main.io_manager, "send_telegram") as send, \
-            patch.object(main.io_manager, "display_result"):
-        processed = main.process_batch([record], datetime(2026, 10, 9, 10, 43))
+    processed = pipeline.process_batch([log], TEST_TIME)
 
-    send.assert_not_called()
-    assert processed[0]["decision"]["human_review_notification_sent"] is True
+    telegram.send_review_request.assert_not_called()
+    assert processed[0].decision.review_notification_sent is True
 
 
 def test_background_dispatch_marks_reports_sent_without_cli_output() -> None:
-    due_record = {
-        "log_id": "test-due",
-        "decision": {
-            "route": lm.ROUTE_STANDARD,
-            "score": 42,
-            "notify_now": False,
-            "requires_human_review": False,
-            "notification_sent": False,
-            "scheduled_send_time": "2026-10-10T07:00:00",
-        },
-    }
+    due = evaluated(deferred())
+    repository = MagicMock()
+    repository.load_all.return_value = [due]
+    repository.save.return_value = True
+    telegram = MagicMock()
+    telegram.send_daily_report.return_value = (True, "Sent")
+    view = MagicMock()
+    pipeline = make_pipeline(view=view, repository=repository, telegram=telegram)
 
-    with patch.object(main.data_manager, "load_records", return_value=[due_record]), \
-            patch.object(main.logic_manager, "get_due_alerts", return_value=[due_record]), \
-            patch.object(main.io_manager, "build_daily_report", return_value="Daily report"), \
-            patch.object(main.io_manager, "send_telegram", return_value=(True, "Sent")) as send, \
-            patch.object(main.data_manager, "add_record", return_value=True) as save, \
-            patch.object(main.io_manager, "display_message") as display:
-        main.dispatch_due_reports(show_message=False)
+    with patch("main_triage_pipeline.datetime") as clock:
+        clock.now.return_value = datetime(2026, 10, 10, 7, 0)
+        pipeline.dispatch_due_reports(show_message=False)
 
-    send.assert_called_once_with("Daily report")
-    assert save.call_args.args[0]["decision"]["notification_sent"] is True
-    display.assert_not_called()
+    telegram.send_daily_report.assert_called_once_with([due])
+    assert repository.save.call_args.args[0].decision.notification_sent is True
+    view.display_message.assert_not_called()
 
 
 def test_should_send_now() -> None:
-    urgent = lm.process_record(URGENT_RECORD, now=TEST_TIME)
-    needs_review = lm.process_record(REVIEW_RECORD, now=TEST_TIME)
-    deferred = lm.process_record(DEFERRED_RECORD, now=TEST_TIME)
+    sent_urgent = evaluated(urgent())
+    sent_urgent.decision.mark_sent()
     results = {
-        "urgent, unsent": lm.should_send_now(urgent),
-        "human review": lm.should_send_now(needs_review),
-        "deferred": lm.should_send_now(deferred),
-        "already sent": lm.should_send_now(lm.mark_sent(urgent)),
+        "urgent, unsent": SCHEDULER.should_send_now(evaluated(urgent())),
+        "human review": SCHEDULER.should_send_now(evaluated(needs_review())),
+        "deferred": SCHEDULER.should_send_now(evaluated(deferred())),
+        "already sent": SCHEDULER.should_send_now(sent_urgent),
     }
     print("should_send_now eligibility (True means attempt to send):")
     print(pformat(results))
-    assert results == {
-        "urgent, unsent": True,
-        "human review": False,
-        "deferred": False,
-        "already sent": False,
-    }
+    assert results == {"urgent, unsent": True, "human review": False,
+                       "deferred": False, "already sent": False}
 
 
 def test_get_due_alerts() -> None:
-    deferred = lm.process_record(DEFERRED_RECORD, now=TEST_TIME)
-    urgent = lm.process_record(URGENT_RECORD, now=TEST_TIME)
-    needs_review = lm.process_record(REVIEW_RECORD, now=TEST_TIME)
-    candidates = [
-        deferred,
-        lm.mark_sent(deferred),
-        urgent,
-        needs_review,
-    ]
-    before_due = lm.get_due_alerts(candidates, "2026-10-10T06:59:59")
-    at_due = lm.get_due_alerts(candidates, "2026-10-10T07:00:00")
-    results = {
-        "before due": [record["machine_id"] for record in before_due],
-        "at due": [record["machine_id"] for record in at_due],
-    }
+    waiting = evaluated(deferred())
+    already_sent = evaluated(deferred())
+    already_sent.decision.mark_sent()
+    candidates = [waiting, already_sent, evaluated(urgent()), evaluated(needs_review())]
+    before = SCHEDULER.get_due_alerts(candidates, datetime(2026, 10, 10, 6, 59, 59))
+    at_due = SCHEDULER.get_due_alerts(candidates, datetime(2026, 10, 10, 7, 0, 0))
+    results = {"before due": [log.machine_id for log in before],
+               "at due": [log.machine_id for log in at_due]}
     print("get_due_alerts eligible machine IDs:")
     print(pformat(results))
     assert results == {"before due": [], "at due": ["XR-008"]}
-    assert at_due == [deferred]
+    assert at_due == [waiting]
+
+
+def test_confidence_threshold_is_70_percent() -> None:
+    """Business Rule 5: below 70% confidence -> human review; 70% or more is trusted."""
+    below = evaluated(make_log("c69", "CT-114", 3, confidence=0.69))
+    at = evaluated(make_log("c70", "CT-114", 3, confidence=0.70))
+    above = evaluated(make_log("c72", "CT-114", 3, confidence=0.72))
+    assert TriageEngine.CONFIDENT == 0.70
+    assert below.decision.route == TriageEngine.ROUTE_HUMAN_TRIAGE
+    assert at.decision.route == TriageEngine.ROUTE_STANDARD
+    assert above.decision.route == TriageEngine.ROUTE_STANDARD
+    assert "R2_low_confidence_pending_review" not in at.decision.rules_fired
+
+
+def test_bundle_repeats() -> None:
+    """Rule 3: same machine + error code within 10 minutes -> one notification."""
+    first = evaluated(make_log("a", "CT-114", 5, True, timestamp="2026-10-09T08:00:00"))
+    second = evaluated(make_log("b", "CT-114", 5, True, timestamp="2026-10-09T08:04:00"))
+    later = evaluated(make_log("c", "CT-114", 5, True, timestamp="2026-10-09T08:30:00"))
+    SCHEDULER.bundle_repeats([first, second, later])
+    assert first.decision.bundled_count == 2
+    assert second.decision.suppressed_by == "a"
+    assert second.decision.notification_sent is True
+    assert later.decision.suppressed_by is None
+
+
+def test_bug_fix_query_safety_risk_without_ai() -> None:
+    """Phase 1 crashed here when a record had no AI assessment."""
+    ui = ConsoleUI()
+    with patch.object(ui, "_ask_choice",
+                      return_value="Records flagged as a patient safety risk"), \
+            patch("builtins.print"):
+        predicate = ui.prompt_query_filter()
+    assert predicate(make_log("no-ai", "CT-114")) is False
+    assert predicate(evaluated(urgent())) is True
+
+
+def test_bug_fix_text_confidence_is_rejected() -> None:
+    """Phase 1 crashed on a text confidence; now it fails validation and retries."""
+    client = AIClient("http://fake", "model", "key")
+    bad = {"machine_subsystem": "x", "severity": 3, "root_cause_hypothesis": "y",
+           "patient_safety_risk": False, "recurrence_indicator": False,
+           "recommended_action": "z", "confidence": "high"}
+    assert client._validate(bad) is False
+    log = make_log("bad-ai", "CT-114")
+    with patch.object(client, "_call_api", return_value='{"severity": 3}'), \
+            patch("ai_manager_ai_client.time.sleep"):
+        client.enrich(log)
+    assert log.ai_assessment is None
+    assert log.ai_error == "AI response failed schema validation"
+
+
+def test_notifiers_are_substitutable() -> None:
+    """LSP: the pipeline treats every Notifier the same way; only a real delivery
+    (Telegram) marks the log as sent."""
+    screen = MagicMock()
+    screen.notify_urgent.return_value = (False, "")
+    phone = MagicMock()
+    phone.notify_urgent.return_value = (True, "Telegram: Sent")
+    view = MagicMock()
+    log = evaluated(urgent())
+    make_pipeline(view=view, notifiers=[screen, phone])._send_urgent_alert(log)
+    assert log.decision.notification_sent is True
+    view.display_message.assert_called_once_with("Telegram: Sent")
+
+    log = evaluated(urgent())
+    make_pipeline(notifiers=[screen])._send_urgent_alert(log)
+    assert log.decision.notification_sent is False
+
+
+def test_html_report() -> None:
+    """New feature: the HTML report is written to a file and escapes log text."""
+    log = evaluated(make_log("x1", "CT-114", 5, True, confidence=0.95))
+    log._raw_message = "<script>alert('x')</script> pump failure"
+    with tempfile.TemporaryDirectory() as folder:
+        manager = ReportManager(folder, [HTMLReportFormatter(), MarkdownReportFormatter()])
+        assert manager.available_formats() == ["HTML", "Markdown"]
+        path = manager.generate([log], "HTML", now=datetime(2026, 11, 7, 2, 0))
+        assert path.endswith("report_20261107_020000.html")
+        html = open(path, encoding="utf-8").read()
+    assert html.startswith("<!DOCTYPE html>")
+    assert "<script>" not in html and "&lt;script&gt;" in html
+    assert "immediate_escalation" in html and "CT-114" in html
+    assert manager.generate([log], "PDF") is None
+
+
+def test_markdown_report() -> None:
+    """Polymorphism: same ReportManager call, different formatter, different file."""
+    logs = [evaluated(urgent()), evaluated(needs_review())]
+    with tempfile.TemporaryDirectory() as folder:
+        manager = ReportManager(folder, [HTMLReportFormatter(), MarkdownReportFormatter()])
+        path = manager.generate(logs, "Markdown", now=datetime(2026, 11, 7, 2, 0))
+        text = open(path, encoding="utf-8").read()
+    assert path.endswith(".md")
+    assert text.startswith("# Biomedical Equipment Error Report")
+    assert "| Records stored | 2 |" in text
+    assert "Awaiting human review" in text
+
+
+def test_gui_notifier() -> None:
+    """The GUI pop-up notifier behaves like ConsoleNotifier (skipped without Tkinter)."""
+    try:
+        from io_manager_gui_notifier import GuiNotifier
+    except ImportError:
+        print("  (Tkinter not installed - GUI notifier test skipped)")
+        return
+    window = MagicMock()
+    assert GuiNotifier(window).notify_urgent(evaluated(urgent())) == (False, "")
+    assert "CT-114" in window.show_alert.call_args.args[0]
 
 
 TESTS = (
-    test_process_record,
-    test_malformed_ai_assessment,
+    test_evaluate,
+    test_invalid_assessment_is_rejected,
+    test_human_assessment_overrides_ai,
     test_summarise,
+    test_json_round_trip,
     test_send_telegram,
     test_telegram_message_builders,
     test_manual_review_recalculates_and_escalates,
@@ -377,13 +434,20 @@ TESTS = (
     test_background_dispatch_marks_reports_sent_without_cli_output,
     test_should_send_now,
     test_get_due_alerts,
+    test_confidence_threshold_is_70_percent,
+    test_bundle_repeats,
+    test_bug_fix_query_safety_risk_without_ai,
+    test_bug_fix_text_confidence_is_rejected,
+    test_notifiers_are_substitutable,
+    test_html_report,
+    test_markdown_report,
+    test_gui_notifier,
 )
 
 
 if __name__ == "__main__":
-    print(
-        "Running project tests (mocked AI/Telegram; no live network calls)..."
-    )
+    logging.disable(logging.CRITICAL)   # keep log noise out of the test output
+    print("Running project tests (mocked AI/Telegram; no live network calls)...")
     for test in TESTS:
         test()
         print(f"PASS {test.__name__}")

@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime
 
-from data_manager_phase2 import RecordRepository
+from data_manager_record_repository import RecordRepository
 from io_manager_console_ui import ConsoleUI
 from io_manager_log_file_reader import LogFileReader
 from io_manager_report_manager import ReportManager
@@ -12,8 +12,9 @@ from main_triage_pipeline import TriagePipeline
 
 logger = logging.getLogger(__name__)
 
-class TraigeApp:
-    """Command-line front end: menu, prompts and results; work goes to the pipeline"""
+
+class TriageApp:
+    """Command-line front end: menu, prompts and results; work goes to the pipeline."""
 
     def __init__(self, ui: ConsoleUI, reader: LogFileReader, pipeline: TriagePipeline,
                  repository: RecordRepository, analyzer: FleetAnalyzer,
@@ -41,7 +42,6 @@ class TraigeApp:
             "Fleet summary report": self._handle_summary,
             "Generate HTML / Markdown report": self._handle_generate_report,
         }
-
         try:
             while True:
                 choice = self._ui.prompt_main_menu()
@@ -69,8 +69,8 @@ class TraigeApp:
     def _handle_single_entry(self) -> None:
         log = self._ui.prompt_error_log()
         if log is None:
-            self._ui.display_message("Cancelled")
-            return    
+            self._ui.display_message("Cancelled.")
+            return
         self._ui.display_message("Sending to the AI for assessment...")
         processed = self._pipeline.process_batch([log], datetime.now())
         self._ui.display_record(processed[0])
@@ -136,7 +136,7 @@ class TraigeApp:
                 source = "human_assessed"
             self._pipeline.apply_review(log, severity, safety_risk, source)
 
-    def _handle_generate_report(self) -> None:
+    def _handle_summary(self) -> None:
         self._ui.display_summary(self._analyzer.summarise(self._repository.load_all()))
 
     def _handle_generate_report(self) -> None:

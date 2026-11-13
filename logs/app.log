@@ -1,5 +1,37 @@
-2026-10-09 11:40:26,991 INFO     __main__       Application started
-2026-10-09 11:43:47,229 INFO     __main__       Application started
-2026-10-09 11:44:20,563 INFO     ai_manager     Record 0fec916bb5d7 enriched on attempt 1
-2026-10-09 11:44:20,563 INFO     logic_manager  Record 0fec916bb5d7 routed to human_triage with score 27
-2026-10-09 11:45:03,982 INFO     __main__       Application started
+2026-11-07 02:55:29,096 INFO     main_gui_app   GUI started
+2026-11-07 02:55:35,448 INFO     io_manager_log_file_reader Read 6 records and 0 problem lines from C:/Users/Naim/Documents/VScode/Project/logs/demo_scenarios.txt
+2026-11-07 02:55:36,610 INFO     ai_manager_ai_client Record fb14bd671b07 enriched on attempt 1
+2026-11-07 02:55:36,610 INFO     logic_manager_triage_engine Record fb14bd671b07 routed to immediate_escalation with score 90
+2026-11-07 02:55:37,638 INFO     ai_manager_ai_client Record 2c8ea5676e06 enriched on attempt 1
+2026-11-07 02:55:37,638 INFO     logic_manager_triage_engine Record 2c8ea5676e06 routed to standard_queue with score 62
+2026-11-07 02:55:38,758 INFO     ai_manager_ai_client Record e238a85e4662 enriched on attempt 1
+2026-11-07 02:55:38,758 INFO     logic_manager_triage_engine Record e238a85e4662 routed to recurring_fault_review with score 52
+2026-11-07 02:55:39,722 INFO     ai_manager_ai_client Record e88706c53ca6 enriched on attempt 1
+2026-11-07 02:55:39,722 INFO     logic_manager_triage_engine Record e88706c53ca6 routed to recurring_fault_review with score 72
+2026-11-07 02:55:40,386 INFO     ai_manager_ai_client Record 82ef2e12005b enriched on attempt 1
+2026-11-07 02:55:40,386 INFO     logic_manager_triage_engine Record 82ef2e12005b routed to scheduled_maintenance with score 14
+2026-11-07 02:55:41,380 INFO     ai_manager_ai_client Record 51488d90bf4a enriched on attempt 1
+2026-11-07 02:55:41,380 INFO     logic_manager_triage_engine Record 51488d90bf4a routed to human_triage with score 13
+2026-11-07 02:55:41,380 INFO     io_manager_gui_notifier Alert shown in GUI for fb14bd671b07
+2026-11-07 02:55:42,278 INFO     io_manager_telegram_notifier Telegram message sent
+2026-11-07 02:55:43,263 INFO     io_manager_telegram_notifier Telegram message sent
+2026-11-07 02:56:38,287 INFO     logic_manager_triage_engine Record 51488d90bf4a routed to standard_queue with score 70
+2026-11-07 02:57:28,429 INFO     ai_manager_ai_client Record 7fa04b1aef95 enriched on attempt 1
+2026-11-07 02:57:28,429 INFO     logic_manager_triage_engine Record 7fa04b1aef95 routed to immediate_escalation with score 90
+2026-11-07 02:57:28,429 INFO     io_manager_gui_notifier Alert shown in GUI for 7fa04b1aef95
+2026-11-07 02:57:29,556 INFO     io_manager_telegram_notifier Telegram message sent
+2026-11-07 02:58:29,868 INFO     ai_manager_ai_client Record 292d2ca4f94a enriched on attempt 1
+2026-11-07 02:58:29,869 INFO     logic_manager_triage_engine Record 292d2ca4f94a routed to standard_queue with score 62
+2026-11-07 03:03:46,984 INFO     main_triage_app Application started
+2026-11-07 03:04:44,964 INFO     ai_manager_ai_client Record afaa6640de9b enriched on attempt 1
+2026-11-07 03:04:44,964 INFO     logic_manager_triage_engine Record afaa6640de9b routed to human_triage with score 13
+2026-11-07 03:04:46,911 INFO     io_manager_telegram_notifier Telegram message sent
+2026-11-07 03:05:44,701 INFO     ai_manager_ai_client Record 75d1133224e0 enriched on attempt 1
+2026-11-07 03:05:44,702 INFO     logic_manager_triage_engine Record 75d1133224e0 routed to human_triage with score 90
+2026-11-07 03:05:45,573 INFO     io_manager_telegram_notifier Telegram message sent
+2026-11-07 03:05:52,539 INFO     io_manager_console_ui Input aborted by user
+2026-11-07 03:05:56,197 INFO     main_gui_app   GUI started
+2026-11-07 03:06:50,685 INFO     logic_manager_triage_engine Record afaa6640de9b routed to standard_queue with score 70
+2026-11-07 03:07:13,958 INFO     logic_manager_triage_engine Record 75d1133224e0 routed to immediate_escalation with score 90
+2026-11-07 03:07:13,959 INFO     io_manager_gui_notifier Alert shown in GUI for 75d1133224e0
+2026-11-07 03:07:15,094 INFO     io_manager_telegram_notifier Telegram message sent

@@ -1,12 +1,29 @@
 # Biomedical Equipment Error Log Triage
 
-## Run the CLI in Docker (PowerShell)
+INF1103 Team Project (Phase 2, object-oriented) by team **JSON Derulo**
+(INF1103-Team-2).
 
-### 1. Start Docker Desktop
+Hospital machines produce many error logs. This app reads them, asks an AI to
+assess each one (severity, patient-safety risk, likely cause), applies our
+business rules, alerts engineers on Telegram, and stores everything in a JSON
+file. It follows the fixed architecture
+`io_manager → ai_manager → logic_manager → data_manager`, with one class per
+file.
 
-Open Docker Desktop and wait until its engine is running.
+You can use it in three ways:
 
-### 2. Open PowerShell in the project folder
+| Way | Command | Best for |
+|---|---|---|
+| Command-line menu | `python main.py` | Everyday use, scripts, Docker |
+| Desktop window (GUI) | `python main.py --gui` | Clicking instead of typing; needs a screen |
+| Docker | `docker run ...` (see below) | Same setup on every laptop; CLI and tests only |
+
+The new feature (HTML / Markdown report) works in all three. The GUI
+(advanced feature) runs on your own computer only, not inside Docker.
+
+## 1. Before you start
+
+### 1.1 Open a terminal in the project folder
 
 In File Explorer, open the `Project` folder, click the address bar, type
 `powershell`, and press Enter. This opens PowerShell in that folder without
@@ -18,9 +35,9 @@ Set-Location "{path\to\your}\Project"
 ```
 
 The current folder should contain `Dockerfile`, `requirements.txt`, and
-`main.py`. The commands below assume PowerShell and that folder.
+`main.py`. All commands in this README assume PowerShell and that folder.
 
-### 3. Prepare the `.env` file
+### 1.2 Prepare the `.env` file
 
 Create or edit `.env` in the project folder. Add your own API credentials and
 settings, or request the team's `.env` file from the Group 2 leader through a
@@ -33,37 +50,139 @@ AI_BASE_URL=https://api.groq.com/openai/v1
 AI_MODEL=openai/gpt-oss-20b
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
+DATA_FILE=data/processed_records.json
 ```
 
 `AI_BASE_URL` and `AI_MODEL` should match the AI provider and model for your
-key. Telegram settings are optional. The Docker image does not contain `.env`;
-`docker run --env-file .env` passes the values into the container at runtime.
+key. Telegram settings are optional; when they are empty, messages are shown
+as a "DRY RUN" instead of being sent. Without an AI key the app still runs,
+but every record goes to human review.
 
-### 4. Create persistent-data and log folders
+`DATA_FILE=data/processed_records.json` makes the local CLI and the GUI use
+the **same records as Docker** (Docker saves to the same `data` folder; see
+section 4). Docker still works with this line, because the `-e DATA_FILE=...`
+in the `docker run` command takes priority over the value in `.env`.
+
+The Docker image does not contain `.env`; `docker run --env-file .env` passes
+the values into the container at runtime.
+
+### 1.3 Create the data, log and report folders
 
 ```powershell
-New-Item -ItemType Directory -Force .\data, .\logs
+New-Item -ItemType Directory -Force .\data, .\logs, .\reports
 ```
 
-`data` stores processed records on your computer. Put optional machine log
-files to ingest in `logs`. The app's own diagnostic file, `app.log`, is also
-written there when running in Docker.
+| Folder | What goes there |
+|---|---|
+| `data` | `processed_records.json`, all processed records |
+| `logs` | Machine log files you want to ingest, plus the app's own `app.log` |
+| `reports` | HTML / Markdown reports created by menu option 7 or the GUI |
 
-### 5. Build the Docker image
+## 2. Run on your own computer (CLI and GUI)
+
+### 2.1 One-time setup
+
+1. Install **Python 3.12**. On Windows, tick **"tcl/tk and IDLE"** in the
+   installer; the GUI needs it.
+2. Install the libraries:
+
+```powershell
+pip install -r requirements.txt
+```
+
+If `python` or `pip` is not found, use `py` / `py -m pip` (Windows) or
+`python3` / `pip3` (macOS and Linux).
+
+### 2.2 Command-line menu
+
+```powershell
+python main.py
+```
+
+| Option | What it does |
+|---|---|
+| 1. Enter a single error log | Type one log; the AI assesses it and the rules triage it |
+| 2. Ingest a log file | Read a whole file (format below), e.g. `logs\errors.txt` |
+| 3. View all stored records | Table sorted by priority; optionally show the top record in full |
+| 4. Query stored records | Immediate escalations, safety risks, human review, or by machine ID |
+| 5. Review pending records | Approve the AI severity or enter your own |
+| 6. Fleet summary report | Totals, routes and machines with repeat faults, on screen |
+| 7. Generate HTML / Markdown report | **New feature**: saves a report file in `reports\` |
+| 8. Exit | Save and close |
+
+Log file format, one error per line:
+
+```text
+timestamp | machine_id | error_code | machine_type | error message
+2026-09-16 21:30:05 | CT-114 | E102 | CT scanner | Coolant temperature exceeded 90C
+```
+
+Lines that do not match are skipped and listed on screen. If no line is
+valid, the app shows "Invalid log format. Upload aborted." (Business Rule 4).
+
+### 2.3 Desktop window (GUI)
+
+```powershell
+python main.py --gui
+```
+
+| Button / area | What it does |
+|---|---|
+| + Add error log | Form with the same checks as the CLI; sends the log to the AI |
+| Import log file | Pick a log file; skipped lines appear in the Activity panel |
+| Review pending (n) | One dialog per record: approve the AI, enter your own, skip or stop |
+| Generate report | Create an HTML or Markdown report and open it in your browser |
+| Show / Machine ID | Filter the table or search for one machine |
+| Record details | Everything about the selected record |
+| Activity | Live messages: AI progress, Telegram results, errors |
+
+AI and Telegram calls run in the background, so the window does not freeze.
+Urgent errors also pop up as an alert.
+
+**Always start the GUI (and the CLI) from the project folder.** The
+`data`, `logs` and `reports` paths are relative to the folder you start in.
+If you start from somewhere else, the app will look for a different (empty)
+records file.
+
+If you see `No module named 'tkinter'`: on Windows, re-run the Python
+installer, choose **Modify**, and tick **tcl/tk and IDLE**. On macOS with
+Homebrew, run `brew install python-tk`. On Linux, run
+`sudo apt install python3-tk`.
+
+### 2.4 Offline tests
+
+```powershell
+python test_logic.py
+```
+
+21 tests check the business rules, storage, Telegram messages, the pipeline,
+the bug fixes, the report and the GUI notifier. AI and Telegram are mocked, so
+no credentials or internet are needed. The GUI test is skipped automatically
+when Tkinter is not installed.
+
+## 3. Run in Docker (CLI and tests)
+
+### 3.1 Start Docker Desktop
+
+Open Docker Desktop and wait until its engine is running.
+
+### 3.2 Build the Docker image
 
 ```powershell
 docker build -t inf1103-group2-errorlogging .
 ```
 
-This builds an image named `inf1103-group2-errorlogging` using the `Dockerfile` in the
-current folder. Rebuild it after changing application code or the Dockerfile.
+This builds an image named `inf1103-group2-errorlogging` using the
+`Dockerfile` in the current folder. Rebuild it after changing application code
+or the Dockerfile.
 
-### 6. Run the interactive app with mounted folders
+### 3.3 Run the interactive app with mounted folders
 
 ```powershell
 docker run --rm -it `
   --mount "type=bind,source=$((Get-Location).Path)\data,target=/data" `
   --mount "type=bind,source=$((Get-Location).Path)\logs,target=/app/logs" `
+  --mount "type=bind,source=$((Get-Location).Path)\reports,target=/app/reports" `
   --env-file .env `
   -e DATA_FILE=/data/processed_records.json `
   inf1103-group2-errorlogging
@@ -72,7 +191,8 @@ docker run --rm -it `
 The `data` mount maps `Project\data` on your computer to `/data` in the
 container. Records are saved to `Project\data\processed_records.json` and
 remain there after the container exits. The `DATA_FILE` setting tells
-`data_manager.py` to use that mounted location.
+`RecordRepository` (in `data_manager_record_repository.py`) to use that
+mounted location.
 
 The `logs` mount maps `Project\logs` to `/app/logs`. The app writes
 `app.log` there; you can also put machine log files in this folder and select
@@ -81,10 +201,18 @@ prompted. This mount is writable so the app can create its diagnostic log.
 If you do not need file ingestion, you can leave `logs` empty; the app still
 runs normally.
 
-`--rm` removes the container when it exits, while the mounted data and log
-files stay on your computer. Select **Exit** in the app menu to stop it.
+The `reports` mount maps `Project\reports` to `/app/reports`, so reports
+from menu option 7 are kept on your computer. Without this mount they would
+be deleted together with the container.
 
-### 7. Run the offline logic tests in Docker
+`--rm` removes the container when it exits, while the mounted data, log and
+report files stay on your computer. Select **Exit** in the app menu to stop it.
+
+The GUI cannot run in Docker (a container has no screen). If you run
+`python main.py --gui` inside the container, the app prints a short message
+and stops.
+
+### 3.4 Run the offline tests in Docker
 
 After building the image, run:
 
@@ -92,12 +220,62 @@ After building the image, run:
 docker run --rm inf1103-group2-errorlogging python test_logic.py
 ```
 
-The tests mock AI and Telegram calls, so they do not require credentials or
-send real requests. To rebuild before testing after code changes:
+Expected result: `All 21 tests passed.` To rebuild before testing after code
+changes:
 
 ```powershell
 docker build -t inf1103-group2-errorlogging .
 docker run --rm inf1103-group2-errorlogging python test_logic.py
 ```
 
+## 4. How the CLI, GUI and Docker share data
 
+| Run with | Records file used |
+|---|---|
+| Local CLI / GUI with `DATA_FILE=data/processed_records.json` in `.env` | `Project\data\processed_records.json` |
+| Docker with the `data` mount (section 3.3) | `Project\data\processed_records.json` (seen as `/data/...` inside) |
+
+Both rows point at the same file, so records added in the GUI are visible in
+the Docker CLI and the other way round. Do not run both at the same time;
+they would overwrite each other's saves.
+
+## 5. Business rules
+
+| Rule | Behaviour |
+|---|---|
+| 1. Immediate alert | High severity + patient-safety risk + confident AI → Telegram straight away |
+| 2. Non-urgent batching | Other alerts are queued and sent in one report after 07:00 |
+| 3. Repeat suppression | Same machine + same error code within 10 minutes → one notification |
+| 4. Invalid file | File without valid lines → "Invalid log format. Upload aborted." |
+| 5. Confidence threshold | AI confidence **below 70%** → pending human review, no automatic Telegram alert |
+
+## 6. Project structure
+
+One class per file, named `<manager>_<class>.py`.
+
+| Manager | Files (class) |
+|---|---|
+| main | `main.py` (builds the objects, no class), `main_triage_app.py` (CLI menu), `main_gui_app.py` (GUI controller), `main_triage_pipeline.py` (shared processing) |
+| io_manager | `io_manager_console_ui.py`, `io_manager_output_view.py` (interface), `io_manager_log_file_reader.py`, `io_manager_notifier.py` (interface), `io_manager_console_notifier.py`, `io_manager_telegram_notifier.py` |
+| io_manager: report | `io_manager_report_manager.py`, `io_manager_report_formatter.py` (abstract), `io_manager_html_report_formatter.py`, `io_manager_markdown_report_formatter.py` |
+| io_manager: GUI | `io_manager_gui_window.py`, `io_manager_gui_notifier.py` |
+| ai_manager | `ai_manager_ai_client.py` |
+| logic_manager | `logic_manager_error_log.py`, `logic_manager_decision.py`, `logic_manager_assessment.py` (abstract), `logic_manager_ai_assessment.py`, `logic_manager_human_assessment.py`, `logic_manager_triage_engine.py`, `logic_manager_alert_scheduler.py`, `logic_manager_fleet_analyzer.py` |
+| data_manager | `data_manager_record_repository.py` |
+| Tests | `test_logic.py` |
+| UML | `uml/0_overview.png` to `uml/7_gui_feature.png`, with PlantUML sources (`.puml`) and the shared `style.iuml` |
+| Docs | `docs/screenshots/`, `docs/sample_report.html`, `docs/sample_report.md` |
+
+## 7. Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `No module named 'tkinter'` | See the end of section 2.3 |
+| `No module named 'dotenv'` or `'requests'` | `pip install -r requirements.txt` |
+| `python` not found | Use `py` (Windows) or `python3` (macOS / Linux) |
+| Records seem to have disappeared | You started the app from another folder, or `.env` has no `DATA_FILE` line; see sections 1.2 and 2.3 |
+| Docker: cannot connect to the engine | Open Docker Desktop and wait until the engine is running |
+| Docker: report not on my computer | Add the `reports` mount from section 3.3 |
+| `! Could not save record ...` | The `data` folder is missing; run the `New-Item` command in section 1.3 |
+| Every record goes to human review | `AI_API_KEY` is missing or wrong in `.env` |
+| Telegram shows "DRY RUN" | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` are empty in `.env` |

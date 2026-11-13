@@ -1,31 +1,306 @@
 [
     {
-        "log_id": "0fec916bb5d7",
-        "machine_id": "CT-114",
-        "error_code": "E102",
+        "log_id": "fb14bd671b07",
+        "machine_id": "CT-101",
+        "error_code": "E501",
         "machine_type": "CT scanner",
-        "timestamp": "2026-10-09T11:44:14",
-        "reported_by": "owen",
-        "raw_message": "scan failed",
+        "timestamp": "2026-10-12T09:00:00",
+        "reported_by": "log_file_import",
+        "raw_message": "Scanner stopped during an active scan and displayed a hardware fault",
         "ai": {
-            "machine_subsystem": "Imaging system",
+            "machine_subsystem": "X-ray tube / detector assembly",
+            "severity": 5,
+            "root_cause_hypothesis": "A sudden failure in the X-ray tube or detector electronics caused a hardware fault, stopping the scan mid-cycle.",
+            "patient_safety_risk": true,
+            "recurrence_indicator": false,
+            "recommended_action": "Immediately halt the scanner, inspect the X-ray tube and detector for damage or loose connections, run the built-in diagnostic routine, and if the fault persists, contact the manufacturer for repair or replacement.",
+            "confidence": 0.7
+        },
+        "decision": {
+            "route": "immediate_escalation",
+            "score": 90,
+            "notify_now": true,
+            "scheduled_send_time": "2026-11-07T02:55:35",
+            "requires_human_review": false,
+            "rules_fired": [
+                "R1_confident_high_severity_safety_risk"
+            ],
+            "notification_sent": true
+        }
+    },
+    {
+        "log_id": "2c8ea5676e06",
+        "machine_id": "XR-202",
+        "error_code": "E210",
+        "machine_type": "X-ray machine",
+        "timestamp": "2026-10-12T09:05:00",
+        "reported_by": "log_file_import",
+        "raw_message": "Image quality changed unexpectedly during operation",
+        "ai": {
+            "machine_subsystem": "Imaging Detector",
             "severity": 3,
-            "root_cause_hypothesis": "A software or communication failure caused the scan to abort before completion",
+            "root_cause_hypothesis": "Detector calibration drift or sensor malfunction causing image quality variation",
+            "patient_safety_risk": true,
+            "recurrence_indicator": false,
+            "recommended_action": "Run detector calibration diagnostics, inspect sensor for damage, and replace the detector module if calibration cannot be restored",
+            "confidence": 0.8
+        },
+        "decision": {
+            "route": "standard_queue",
+            "score": 62,
+            "notify_now": false,
+            "scheduled_send_time": "2026-11-09T07:00:00",
+            "requires_human_review": false,
+            "rules_fired": []
+        }
+    },
+    {
+        "log_id": "e238a85e4662",
+        "machine_id": "CT-303",
+        "error_code": "E310",
+        "machine_type": "CT scanner",
+        "timestamp": "2026-10-12T09:10:00",
+        "reported_by": "log_file_import",
+        "raw_message": "Cooling system warning repeated 3 times during operation",
+        "ai": {
+            "machine_subsystem": "Cooling System",
+            "severity": 3,
+            "root_cause_hypothesis": "A coolant flow sensor or fan is intermittently failing, causing the system to trigger a warning each time the temperature threshold is approached.",
+            "patient_safety_risk": false,
+            "recurrence_indicator": true,
+            "recommended_action": "Inspect coolant flow, verify fan operation, and replace any faulty components; then run a diagnostic cycle to confirm resolution.",
+            "confidence": 0.7
+        },
+        "decision": {
+            "route": "recurring_fault_review",
+            "score": 52,
+            "notify_now": false,
+            "scheduled_send_time": "2026-11-08T07:00:00",
+            "requires_human_review": false,
+            "rules_fired": [
+                "R3_recurring_moderate_or_worse"
+            ],
+            "bundled_count": 2
+        }
+    },
+    {
+        "log_id": "e88706c53ca6",
+        "machine_id": "CT-303",
+        "error_code": "E310",
+        "machine_type": "CT scanner",
+        "timestamp": "2026-10-12T09:16:00",
+        "reported_by": "log_file_import",
+        "raw_message": "Cooling system warning repeated again during operation",
+        "ai": {
+            "machine_subsystem": "Cooling System",
+            "severity": 3,
+            "root_cause_hypothesis": "A malfunctioning coolant flow sensor or fan is causing intermittent temperature rise, triggering the warning repeatedly.",
+            "patient_safety_risk": true,
+            "recurrence_indicator": true,
+            "recommended_action": "Inspect coolant flow, verify fan operation, and replace any defective sensor or fan component; then clear the warning and monitor temperature during a test run.",
+            "confidence": 0.7
+        },
+        "decision": {
+            "route": "recurring_fault_review",
+            "score": 72,
+            "notify_now": false,
+            "scheduled_send_time": "2026-11-08T07:00:00",
+            "requires_human_review": false,
+            "rules_fired": [
+                "R3_recurring_moderate_or_worse"
+            ],
+            "suppressed_by": "e238a85e4662",
+            "notification_sent": true
+        }
+    },
+    {
+        "log_id": "82ef2e12005b",
+        "machine_id": "XR-404",
+        "error_code": "E105",
+        "machine_type": "X-ray machine",
+        "timestamp": "2026-10-12T09:20:00",
+        "reported_by": "log_file_import",
+        "raw_message": "Non-critical panel indicator light is dim",
+        "ai": {
+            "machine_subsystem": "Panel Indicator Light",
+            "severity": 1,
+            "root_cause_hypothesis": "The dim light is likely due to a failing LED or reduced power supply to the indicator panel.",
             "patient_safety_risk": false,
             "recurrence_indicator": false,
-            "recommended_action": "Restart the scanner, review detailed system logs, verify firmware integrity, and run a diagnostic test to confirm the imaging subsystem is functioning correctly",
+            "recommended_action": "Inspect the indicator panel for LED failure or power supply issues and replace the LED or repair the power circuit as needed.",
+            "confidence": 0.9
+        },
+        "decision": {
+            "route": "scheduled_maintenance",
+            "score": 14,
+            "notify_now": false,
+            "scheduled_send_time": "2026-11-12T07:00:00",
+            "requires_human_review": false,
+            "rules_fired": [
+                "R4_low_severity_no_safety_risk"
+            ]
+        }
+    },
+    {
+        "log_id": "51488d90bf4a",
+        "machine_id": "CT-505",
+        "error_code": "E220",
+        "machine_type": "CT scanner",
+        "timestamp": "2026-10-12T09:25:00",
+        "reported_by": "log_file_import",
+        "raw_message": "System reports a brief sensor warning and then returns to normal",
+        "ai": {
+            "machine_subsystem": "image sensor",
+            "severity": 2,
+            "root_cause_hypothesis": "Transient sensor glitch likely caused by a brief temperature fluctuation or minor debris on the detector surface",
+            "patient_safety_risk": false,
+            "recurrence_indicator": false,
+            "recommended_action": "Verify sensor calibration, inspect for debris or dust, and monitor logs for any repeat warnings; if the warning recurs, schedule a detailed sensor diagnostic",
             "confidence": 0.4
         },
         "decision": {
-            "route": "human_triage",
-            "score": 27,
-            "notify_now": true,
-            "scheduled_send_time": "2026-10-09T11:44:19",
-            "requires_human_review": true,
+            "route": "standard_queue",
+            "score": 70,
+            "notify_now": false,
+            "scheduled_send_time": "2026-11-09T07:00:00",
+            "requires_human_review": false,
             "rules_fired": [
-                "R2_low_confidence_pending_review",
-                "R5_confidence_penalty_applied"
+                "R6_human_assessment_approved"
             ]
+        },
+        "human_review": {
+            "status": "approved",
+            "severity": 5,
+            "patient_safety_risk": false,
+            "assessment_source": "human_assessed",
+            "reviewed_at": "2026-11-07T02:56:38"
+        }
+    },
+    {
+        "log_id": "7fa04b1aef95",
+        "machine_id": "CT-101",
+        "error_code": "E501",
+        "machine_type": "CT scanner",
+        "timestamp": "2026-11-07T02:56:57",
+        "reported_by": "Nam",
+        "raw_message": "Scanner stopped during an active scan and displayed a hardware fault",
+        "ai": {
+            "machine_subsystem": "detector array",
+            "severity": 5,
+            "root_cause_hypothesis": "A failure in the detector array caused a hardware fault that halted the scan during operation",
+            "patient_safety_risk": true,
+            "recurrence_indicator": false,
+            "recommended_action": "Inspect the detector array for faults, run diagnostic tests, replace the array if defective, and verify system integrity before resuming scans",
+            "confidence": 0.8
+        },
+        "decision": {
+            "route": "immediate_escalation",
+            "score": 90,
+            "notify_now": true,
+            "scheduled_send_time": "2026-11-07T02:57:27",
+            "requires_human_review": false,
+            "rules_fired": [
+                "R1_confident_high_severity_safety_risk"
+            ],
+            "notification_sent": true
+        }
+    },
+    {
+        "log_id": "292d2ca4f94a",
+        "machine_id": "XR-202",
+        "error_code": "E210",
+        "machine_type": "X-ray machine",
+        "timestamp": "2026-11-07T02:57:57",
+        "reported_by": "Nam",
+        "raw_message": "Image quality changed unexpectedly during operation",
+        "ai": {
+            "machine_subsystem": "detector/imaging sensor",
+            "severity": 3,
+            "root_cause_hypothesis": "Detector calibration drift or sensor malfunction caused the image quality to change unexpectedly",
+            "patient_safety_risk": true,
+            "recurrence_indicator": false,
+            "recommended_action": "Inspect and recalibrate the detector; run a quality assurance test; if sensor damage is detected, replace the detector module",
+            "confidence": 0.8
+        },
+        "decision": {
+            "route": "standard_queue",
+            "score": 62,
+            "notify_now": false,
+            "scheduled_send_time": "2026-11-09T07:00:00",
+            "requires_human_review": false,
+            "rules_fired": []
+        }
+    },
+    {
+        "log_id": "afaa6640de9b",
+        "machine_id": "CT-505",
+        "error_code": "E220",
+        "machine_type": "CT scanner",
+        "timestamp": "2026-11-07T03:04:35",
+        "reported_by": "Nam",
+        "raw_message": "System reports a brief sensor warning and then returns to normal",
+        "ai": {
+            "machine_subsystem": "detector sensor",
+            "severity": 2,
+            "root_cause_hypothesis": "Transient sensor noise or momentary misalignment caused a brief warning that resolved itself",
+            "patient_safety_risk": false,
+            "recurrence_indicator": false,
+            "recommended_action": "Run a diagnostic on the detector sensor subsystem and verify calibration; if the warning recurs, consider replacing the sensor",
+            "confidence": 0.4
+        },
+        "decision": {
+            "route": "standard_queue",
+            "score": 70,
+            "notify_now": false,
+            "scheduled_send_time": "2026-11-09T07:00:00",
+            "requires_human_review": false,
+            "rules_fired": [
+                "R6_human_assessment_approved"
+            ]
+        },
+        "human_review": {
+            "status": "approved",
+            "severity": 5,
+            "patient_safety_risk": false,
+            "assessment_source": "human_assessed",
+            "reviewed_at": "2026-11-07T03:06:50"
+        }
+    },
+    {
+        "log_id": "75d1133224e0",
+        "machine_id": "CT-101",
+        "error_code": "E502",
+        "machine_type": "CT scanner",
+        "timestamp": "2026-11-07T03:05:33",
+        "reported_by": "Nam",
+        "raw_message": "Scanner stopped during an active scan and displayed a fault",
+        "ai": {
+            "machine_subsystem": "gantry motion control",
+            "severity": 5,
+            "root_cause_hypothesis": "A sudden power interruption or motor fault caused the gantry to stop mid\u2011scan, triggering the fault display",
+            "patient_safety_risk": true,
+            "recurrence_indicator": false,
+            "recommended_action": "Immediately power\u2011cycle the unit, inspect the gantry motor and power supply for faults, run the built\u2011in diagnostic routine, and if the issue persists, contact the vendor for repair",
+            "confidence": 0.6
+        },
+        "decision": {
+            "route": "immediate_escalation",
+            "score": 90,
+            "notify_now": true,
+            "scheduled_send_time": "2026-11-07T03:07:13",
+            "requires_human_review": false,
+            "rules_fired": [
+                "R6_human_assessment_approved",
+                "R1_confident_high_severity_safety_risk"
+            ],
+            "notification_sent": true
+        },
+        "human_review": {
+            "status": "approved",
+            "severity": 5,
+            "patient_safety_risk": true,
+            "assessment_source": "human_assessed",
+            "reviewed_at": "2026-11-07T03:07:13"
         }
     }
 ]

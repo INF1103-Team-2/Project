@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional
 
 from ai_manager_ai_client import AIClient
-from data_manager_phase2 import RecordRepository
+from data_manager_record_repository import RecordRepository
 from io_manager_notifier import Notifier
 from io_manager_output_view import OutputView
 from io_manager_telegram_notifier import TelegramNotifier
@@ -19,9 +19,10 @@ from logic_manager_triage_engine import TriageEngine
 
 logger = logging.getLogger(__name__)
 
+
 class TriagePipeline:
-    """
-    Runs logs through AI -> rules -> alerts -> storage.
+    """Runs logs through AI -> rules -> alerts -> storage.
+
     It has no menu and never calls print(): progress goes to an OutputView,
     so the console and the GUI share exactly the same business flow.
     """
@@ -89,9 +90,9 @@ class TriagePipeline:
                         )
             self._view.display_result(log)
         return processed
-    
+
     def apply_review(self, log: ErrorLog, severity: int, safety_risk: bool,
-                         source: str) -> bool:
+                     source: str) -> bool:
         """Store a human assessment, re-run the rules, and alert if now urgent."""
         log.record_human_review(severity, safety_risk, source)
         self._engine.evaluate(log)
@@ -113,8 +114,8 @@ class TriagePipeline:
             self._view.display_message(f"Updated triage route: {log.decision.route}.")
         return True
 
-    def pending_review(self) -> list[ErrorLog]:
-        """Logs flagged for human review that nobody assessed yet"""
+    def pending_reviews(self) -> list[ErrorLog]:
+        """Logs flagged for human review that nobody has assessed yet."""
         return self._repository.query(
             lambda log: (log.decision is not None
                          and log.decision.requires_human_review
@@ -122,6 +123,7 @@ class TriagePipeline:
         )
 
     def _send_urgent_alert(self, log: ErrorLog) -> None:
+        """Polymorphism: every Notifier announces the alert in its own way."""
         delivered = False
         for notifier in self._notifiers:
             ok, info = notifier.notify_urgent(log)
@@ -135,7 +137,7 @@ class TriagePipeline:
     # Rule 2: deferred alerts at 07:00
     # ======================================================================
     def dispatch_due_reports(self, show_message: bool = True) -> None:
-        """One combined telegram report for deferred alerts and those that are due"""
+        """One combined Telegram report for deferred alerts that are now due."""
         due = self._scheduler.get_due_alerts(self._repository.load_all(), datetime.now())
         if not due:
             return
@@ -153,7 +155,7 @@ class TriagePipeline:
                     logger.error("Could not save sent status for record %s", log.log_id)
 
     def start_background_checks(self) -> None:
-        """Check for due reports every minute while the app is open"""
+        """Check for due reports every minute while the app is open."""
         if not self._telegram.is_configured():
             logger.warning("Background due-report checks disabled: Telegram is not configured")
             return
@@ -161,14 +163,14 @@ class TriagePipeline:
         def loop() -> None:
             while not self._stop_event.wait(self.DUE_REPORT_CHECK_SECONDS):
                 try:
-                    self.dispatch_due_reports(show_message = False)
+                    self.dispatch_due_reports(show_message=False)
                 except Exception:
-                    logger.exception("Background due report check failed")
+                    logger.exception("Background due-report check failed")
 
-        self._thread = threading.Thread(target = loop, name = "due-report-scheduler", daemon = True)
+        self._thread = threading.Thread(target=loop, name="due-report-scheduler", daemon=True)
         self._thread.start()
 
     def stop_background_checks(self) -> None:
         self._stop_event.set()
         if self._thread is not None:
-            self._thread.join(timeout = 2)
+            self._thread.join(timeout=2)
