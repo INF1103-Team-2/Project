@@ -97,6 +97,7 @@ def build_console_app() -> TriageApp:
     )
 
 
+
 def build_gui_app():
     """Imported lazily so the CLI (and Docker) never needs Tkinter."""
     from io_manager_gui_notifier import GuiNotifier

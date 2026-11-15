@@ -37,3 +37,8 @@
 2026-11-07 03:07:15,094 INFO     io_manager_telegram_notifier Telegram message sent
 2026-11-13 11:48:32,078 INFO     main_gui_app   GUI started
 2026-11-13 11:48:33,262 INFO     io_manager_telegram_notifier Telegram message sent
+2026-11-13 11:47:25,517 INFO     main_triage_app Application started
+2026-11-13 11:47:27,073 INFO     io_manager_telegram_notifier Telegram message sent
+2026-11-13 11:48:42,283 INFO     main_gui_app   GUI started
+2026-11-13 11:49:01,334 INFO     main_triage_app Application started
+2026-11-13 11:49:10,510 INFO     main_gui_app   GUI started
