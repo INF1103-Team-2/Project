@@ -13,20 +13,20 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import ai_manager_ai_client as ai_module
-import io_manager_telegram_notifier as telegram_module
+import io_manager.io_manager_telegram_notifier as telegram_module
 from ai_manager_ai_client import AIClient
 from data_manager_record_repository import RecordRepository
-from io_manager_console_ui import ConsoleUI
-from io_manager_log_file_reader import LogFileReader
-from io_manager_telegram_notifier import TelegramNotifier
-from logic_manager_ai_assessment import AIAssessment
-from logic_manager_alert_scheduler import AlertScheduler
-from logic_manager_error_log import ErrorLog
-from logic_manager_fleet_analyzer import FleetAnalyzer
-from logic_manager_triage_engine import TriageEngine
-from io_manager_html_report_formatter import HTMLReportFormatter
-from io_manager_markdown_report_formatter import MarkdownReportFormatter
-from io_manager_report_manager import ReportManager
+from io_manager.io_manager_console_ui import ConsoleUI
+from io_manager.io_manager_log_file_reader import LogFileReader
+from io_manager.io_manager_telegram_notifier import TelegramNotifier
+from logic_manager.logic_manager_ai_assessment import AIAssessment
+from logic_manager.logic_manager_alert_scheduler import AlertScheduler
+from logic_manager.logic_manager_error_log import ErrorLog
+from logic_manager.logic_manager_fleet_analyzer import FleetAnalyzer
+from logic_manager.logic_manager_triage_engine import TriageEngine
+from io_manager.io_manager_html_report_formatter import HTMLReportFormatter
+from io_manager.io_manager_markdown_report_formatter import MarkdownReportFormatter
+from io_manager.io_manager_report_manager import ReportManager
 from main_triage_app import TriageApp
 from main_triage_pipeline import TriagePipeline
 
@@ -413,7 +413,7 @@ def test_markdown_report() -> None:
 def test_gui_notifier() -> None:
     """The GUI pop-up notifier behaves like ConsoleNotifier (skipped without Tkinter)."""
     try:
-        from io_manager_gui_notifier import GuiNotifier
+        from io_manager.io_manager_gui_notifier import GuiNotifier
     except ImportError:
         print("  (Tkinter not installed - GUI notifier test skipped)")
         return

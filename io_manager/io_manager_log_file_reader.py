@@ -2,7 +2,7 @@
 
 import logging
 
-from logic_manager_error_log import ErrorLog
+from logic_manager.logic_manager_error_log import ErrorLog
 
 logger = logging.getLogger(__name__)
 

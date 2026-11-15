@@ -7,8 +7,8 @@ from typing import Optional
 
 import requests
 
-from logic_manager_ai_assessment import AIAssessment
-from logic_manager_error_log import ErrorLog
+from logic_manager.logic_manager_ai_assessment import AIAssessment
+from logic_manager.logic_manager_error_log import ErrorLog
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 """logic_manager_ai_assessment.py - an assessment produced by the AI model."""
 
-from logic_manager_assessment import Assessment
+from logic_manager.logic_manager_assessment import Assessment
 
 
 class AIAssessment(Assessment):

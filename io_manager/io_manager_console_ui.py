@@ -5,8 +5,8 @@ import os
 from datetime import datetime
 from typing import Callable, Optional
 
-from io_manager_output_view import OutputView
-from logic_manager_error_log import ErrorLog
+from io_manager.io_manager_output_view import OutputView
+from logic_manager.logic_manager_error_log import ErrorLog
 
 logger = logging.getLogger(__name__)
 

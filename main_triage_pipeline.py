@@ -10,12 +10,12 @@ from typing import Optional
 
 from ai_manager_ai_client import AIClient
 from data_manager_record_repository import RecordRepository
-from io_manager_notifier import Notifier
-from io_manager_output_view import OutputView
-from io_manager_telegram_notifier import TelegramNotifier
-from logic_manager_alert_scheduler import AlertScheduler
-from logic_manager_error_log import ErrorLog
-from logic_manager_triage_engine import TriageEngine
+from io_manager.io_manager_notifier import Notifier
+from io_manager.io_manager_output_view import OutputView
+from io_manager.io_manager_telegram_notifier import TelegramNotifier
+from logic_manager.logic_manager_alert_scheduler import AlertScheduler
+from logic_manager.logic_manager_error_log import ErrorLog
+from logic_manager.logic_manager_triage_engine import TriageEngine
 
 logger = logging.getLogger(__name__)
 

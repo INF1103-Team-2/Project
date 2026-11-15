@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 
-from logic_manager_error_log import ErrorLog
+from logic_manager.logic_manager_error_log import ErrorLog
 
 
 class AlertScheduler:

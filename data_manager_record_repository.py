@@ -7,7 +7,7 @@ import threading
 from datetime import datetime
 from typing import Callable, Optional
 
-from logic_manager_error_log import ErrorLog
+from logic_manager.logic_manager_error_log import ErrorLog
 
 logger = logging.getLogger(__name__)
 

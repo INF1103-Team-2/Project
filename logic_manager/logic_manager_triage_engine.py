@@ -4,8 +4,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from logic_manager_assessment import Assessment
-from logic_manager_error_log import ErrorLog
+from logic_manager.logic_manager_assessment import Assessment
+from logic_manager.logic_manager_error_log import ErrorLog
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
 """io_manager_markdown_report_formatter.py - the fleet report as Markdown text."""
 
-from io_manager_report_formatter import ReportFormatter
-from logic_manager_error_log import ErrorLog
+from io_manager.io_manager_report_formatter import ReportFormatter
+from logic_manager.logic_manager_error_log import ErrorLog
 
 
 class MarkdownReportFormatter(ReportFormatter):

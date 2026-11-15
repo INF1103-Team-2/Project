@@ -6,10 +6,10 @@ import re
 from datetime import datetime
 from typing import Optional
 
-from logic_manager_ai_assessment import AIAssessment
-from logic_manager_assessment import Assessment
-from logic_manager_decision import Decision
-from logic_manager_human_assessment import HumanAssessment
+from logic_manager.logic_manager_ai_assessment import AIAssessment
+from logic_manager.logic_manager_assessment import Assessment
+from logic_manager.logic_manager_decision import Decision
+from logic_manager.logic_manager_human_assessment import HumanAssessment
 
 logger = logging.getLogger(__name__)
 

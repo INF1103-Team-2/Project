@@ -5,9 +5,9 @@ import os
 from datetime import datetime
 from typing import Optional
 
-from io_manager_report_formatter import ReportFormatter
-from logic_manager_error_log import ErrorLog
-from logic_manager_fleet_analyzer import FleetAnalyzer
+from io_manager.io_manager_report_formatter import ReportFormatter
+from logic_manager.logic_manager_error_log import ErrorLog
+from logic_manager.logic_manager_fleet_analyzer import FleetAnalyzer
 
 logger = logging.getLogger(__name__)
 

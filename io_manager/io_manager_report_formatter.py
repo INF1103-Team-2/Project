@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from logic_manager_error_log import ErrorLog
+from logic_manager.logic_manager_error_log import ErrorLog
 
 
 class ReportFormatter(ABC):

@@ -15,18 +15,18 @@ from dotenv import load_dotenv
 
 from ai_manager_ai_client import AIClient
 from data_manager_record_repository import RecordRepository
-from io_manager_console_notifier import ConsoleNotifier
-from io_manager_console_ui import ConsoleUI
-from io_manager_html_report_formatter import HTMLReportFormatter
-from io_manager_log_file_reader import LogFileReader
-from io_manager_markdown_report_formatter import MarkdownReportFormatter
-from io_manager_notifier import Notifier
-from io_manager_output_view import OutputView
-from io_manager_report_manager import ReportManager
-from io_manager_telegram_notifier import TelegramNotifier
-from logic_manager_alert_scheduler import AlertScheduler
-from logic_manager_fleet_analyzer import FleetAnalyzer
-from logic_manager_triage_engine import TriageEngine
+from io_manager.io_manager_console_notifier import ConsoleNotifier
+from io_manager.io_manager_console_ui import ConsoleUI
+from io_manager.io_manager_html_report_formatter import HTMLReportFormatter
+from io_manager.io_manager_log_file_reader import LogFileReader
+from io_manager.io_manager_markdown_report_formatter import MarkdownReportFormatter
+from io_manager.io_manager_notifier import Notifier
+from io_manager.io_manager_output_view import OutputView
+from io_manager.io_manager_report_manager import ReportManager
+from io_manager.io_manager_telegram_notifier import TelegramNotifier
+from logic_manager.logic_manager_alert_scheduler import AlertScheduler
+from logic_manager.logic_manager_fleet_analyzer import FleetAnalyzer
+from logic_manager.logic_manager_triage_engine import TriageEngine
 from main_triage_app import TriageApp
 from main_triage_pipeline import TriagePipeline
 
@@ -100,8 +100,8 @@ def build_console_app() -> TriageApp:
 
 def build_gui_app():
     """Imported lazily so the CLI (and Docker) never needs Tkinter."""
-    from io_manager_gui_notifier import GuiNotifier
-    from io_manager_gui_window import GuiWindow
+    from io_manager.io_manager_gui_notifier import GuiNotifier
+    from io_manager.io_manager_gui_window import GuiWindow
     from main_gui_app import GuiApp
 
     shared = build_shared()

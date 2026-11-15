@@ -1,6 +1,6 @@
 """logic_manager_human_assessment.py - an assessment approved by a reviewer."""
 
-from logic_manager_assessment import Assessment
+from logic_manager.logic_manager_assessment import Assessment
 
 
 class HumanAssessment(Assessment):

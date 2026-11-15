@@ -2,9 +2,9 @@
 
 import logging
 
-from io_manager_console_ui import ConsoleUI
-from io_manager_notifier import Notifier
-from logic_manager_error_log import ErrorLog
+from io_manager.io_manager_console_ui import ConsoleUI
+from io_manager.io_manager_notifier import Notifier
+from logic_manager.logic_manager_error_log import ErrorLog
 
 logger = logging.getLogger(__name__)
 
