@@ -8,6 +8,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # One class per file: main.py + every manager file + the tests
-COPY main.py main_*.py io_manager_*.py ai_manager_*.py logic_manager_*.py data_manager_*.py test_logic.py ./
+COPY main.py main_*.py ai_manager_*.py data_manager_*.py ./
+COPY io_manager ./io_manager 
+COPY logic_manager ./logic_manager
+COPY test_logic.py ./
 
 CMD ["python", "main.py"]
