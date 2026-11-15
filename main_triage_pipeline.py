@@ -48,6 +48,10 @@ class TriagePipeline:
     def process_batch(self, logs: list[ErrorLog], now: datetime) -> list[ErrorLog]:
         """AI enrichment -> business rules -> notification -> storage."""
         stored_by_id = {log.log_id: log for log in self._repository.load_all()}
+        if self._repository.last_problem:      # Part 2: tell the user, don't fail silently
+            self._view.display_error(
+                f"{self._repository.last_problem}. Starting from an empty list; "
+                "the old file is kept as a .corrupt backup when the next record is saved.")
 
         # The same log line uploaded twice has the same log_id; process it once.
         unique: dict[str, ErrorLog] = {}
