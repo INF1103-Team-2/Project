@@ -122,9 +122,17 @@ class AIClient:
                                      json=payload, headers=headers, timeout=30)
             response.raise_for_status()
             body = response.json()
-            return body["choices"][0]["message"]["content"]
         except requests.RequestException as error:
             logger.error("API call failed: %s", error)
+            return None
+        # Fix (Part 2): a 200 reply can still be the wrong shape, e.g. OpenRouter's
+        # {"error": {...}} or an empty "choices" list. Treat it as a failed attempt
+        # (retry, then human review) instead of letting KeyError/IndexError crash the batch.
+        try:
+            return body["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as error:
+            logger.error("AI reply had an unexpected shape (%s: %s): %r",
+                         type(error).__name__, error, str(body)[:200])
             return None
 
     def _parse_response(self, raw: Optional[str]) -> Optional[dict]:

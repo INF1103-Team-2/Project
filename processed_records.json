@@ -51,7 +51,8 @@
             "notify_now": false,
             "scheduled_send_time": "2026-11-09T07:00:00",
             "requires_human_review": false,
-            "rules_fired": []
+            "rules_fired": [],
+            "notification_sent": true
         }
     },
     {
@@ -80,7 +81,8 @@
             "rules_fired": [
                 "R3_recurring_moderate_or_worse"
             ],
-            "bundled_count": 2
+            "bundled_count": 2,
+            "notification_sent": true
         }
     },
     {
@@ -138,7 +140,8 @@
             "requires_human_review": false,
             "rules_fired": [
                 "R4_low_severity_no_safety_risk"
-            ]
+            ],
+            "notification_sent": true
         }
     },
     {
@@ -166,7 +169,8 @@
             "requires_human_review": false,
             "rules_fired": [
                 "R6_human_assessment_approved"
-            ]
+            ],
+            "notification_sent": true
         },
         "human_review": {
             "status": "approved",
@@ -228,7 +232,8 @@
             "notify_now": false,
             "scheduled_send_time": "2026-11-09T07:00:00",
             "requires_human_review": false,
-            "rules_fired": []
+            "rules_fired": [],
+            "notification_sent": true
         }
     },
     {
@@ -256,7 +261,8 @@
             "requires_human_review": false,
             "rules_fired": [
                 "R6_human_assessment_approved"
-            ]
+            ],
+            "notification_sent": true
         },
         "human_review": {
             "status": "approved",
