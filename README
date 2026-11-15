@@ -155,10 +155,10 @@ Homebrew, run `brew install python-tk`. On Linux, run
 python test_logic.py
 ```
 
-21 tests check the business rules, storage, Telegram messages, the pipeline,
-the bug fixes, the report and the GUI notifier. AI and Telegram are mocked, so
-no credentials or internet are needed. The GUI test is skipped automatically
-when Tkinter is not installed.
+30 tests check the business rules, storage, Telegram messages, the pipeline,
+AI retry and malformed-response handling, reports, and the GUI notifier. AI
+and Telegram are mocked, so no credentials or internet are needed. The GUI
+notifier test is skipped automatically when Tkinter is not installed.
 
 ## 3. Run in Docker (CLI and tests)
 
@@ -220,7 +220,7 @@ After building the image, run:
 docker run --rm inf1103-group2-errorlogging python test_logic.py
 ```
 
-Expected result: `All 21 tests passed.` To rebuild before testing after code
+Expected result: `All 30 tests passed.` To rebuild before testing after code
 changes:
 
 ```powershell
@@ -278,4 +278,5 @@ One class per file, named `<manager>_<class>.py`.
 | Docker: report not on my computer | Add the `reports` mount from section 3.3 |
 | `! Could not save record ...` | The `data` folder is missing; run the `New-Item` command in section 1.3 |
 | Every record goes to human review | `AI_API_KEY` is missing or wrong in `.env` |
+| AI response is invalid or has an unexpected format | The app retries the request up to three times; if it still cannot use the response, the record is sent for human review |
 | Telegram shows "DRY RUN" | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` are empty in `.env` |
