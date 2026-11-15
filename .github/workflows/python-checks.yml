@@ -1,0 +1,29 @@
+# CI for INF1103 Project Part 2 (team JSON Derulo).
+# Runs on every push and pull request. No secrets are used: the AI API and
+# Telegram are mocked inside test_logic.py, so no .env file is needed here.
+name: Python checks
+
+on: [push, pull_request]            # the trigger
+
+jobs:
+  test:
+    name: Offline tests (Python 3.12)
+    runs-on: ubuntu-latest          # the runner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      # test_logic.py has its own runner (plain functions, not unittest classes),
+      # so "python -m unittest discover" would find 0 tests. Run the file directly.
+      - run: python test_logic.py
+
+  docker:
+    name: Tests inside Docker
+    runs-on: ubuntu-latest
+    needs: test                     # only build the image if the plain tests pass
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t inf1103-group2-errorlogging .
+      - run: docker run --rm inf1103-group2-errorlogging python test_logic.py
