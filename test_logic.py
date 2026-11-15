@@ -12,10 +12,12 @@ from pprint import pformat
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import ai_manager_ai_client as ai_module
 import io_manager_telegram_notifier as telegram_module
 from ai_manager_ai_client import AIClient
 from data_manager_record_repository import RecordRepository
 from io_manager_console_ui import ConsoleUI
+from io_manager_log_file_reader import LogFileReader
 from io_manager_telegram_notifier import TelegramNotifier
 from logic_manager_ai_assessment import AIAssessment
 from logic_manager_alert_scheduler import AlertScheduler
@@ -420,6 +422,171 @@ def test_gui_notifier() -> None:
     assert "CT-114" in window.show_alert.call_args.args[0]
 
 
+# ---------------------------------------------------------------------------
+# Part 2 error-handling tests (API failure, bad AI replies, missing/corrupt
+# files, bad input). All offline: requests.post is patched, files are temporary.
+# ---------------------------------------------------------------------------
+GOOD_AI_REPLY = ('{"machine_subsystem": "Cooling", "severity": 4, '
+                 '"root_cause_hypothesis": "Pump failure.", "patient_safety_risk": true, '
+                 '"recurrence_indicator": false, "recommended_action": "Check pump.", '
+                 '"confidence": 0.9}')
+
+
+def fake_ai_response(body) -> SimpleNamespace:
+    """A stand-in for requests.Response with HTTP 200 and the given JSON body."""
+    return SimpleNamespace(raise_for_status=lambda: None, json=lambda: body)
+
+
+def ai_body(content: str) -> dict:
+    return {"choices": [{"message": {"content": content}}]}
+
+
+def offline_client() -> AIClient:
+    client = AIClient("http://fake", "model", "key")
+    client._retry_backoff_seconds = 0          # no real waiting in tests
+    return client
+
+
+def test_ai_api_down_retries_then_human_review() -> None:
+    """API unreachable 3 times -> no crash, reason stored, record goes to human review."""
+    log = make_log("api-down", "CT-114")
+    with patch.object(ai_module.requests, "post",
+                      side_effect=ai_module.requests.ConnectionError("down")) as post:
+        offline_client().enrich(log)
+    assert post.call_count == AIClient.MAX_ATTEMPTS
+    assert log.ai_assessment is None
+    assert log.ai_error == "AI API unreachable or returned an error"
+    ENGINE.evaluate(log, now=TEST_TIME)
+    assert log.decision.requires_human_review is True
+
+
+def test_ai_retry_then_success() -> None:
+    """One timeout, then a good reply -> the record is still enriched."""
+    log = make_log("retry-ok", "CT-114")
+    replies = [ai_module.requests.Timeout("slow"), fake_ai_response(ai_body(GOOD_AI_REPLY))]
+    with patch.object(ai_module.requests, "post", side_effect=replies) as post:
+        offline_client().enrich(log)
+    assert post.call_count == 2
+    assert log.ai_assessment.severity == 4
+    assert log.ai_error is None
+
+
+def test_ai_wrong_shape_reply_does_not_crash() -> None:
+    """Bug fix (Part 2): HTTP 200 without 'choices' used to raise KeyError/IndexError."""
+    bodies = {
+        "error object": {"error": {"message": "Provider returned error"}},
+        "empty choices": {"choices": []},
+        "body is a list": [1, 2, 3],
+    }
+    for name, body in bodies.items():
+        log = make_log(f"shape-{name}", "CT-114")
+        with patch.object(ai_module.requests, "post", return_value=fake_ai_response(body)):
+            offline_client().enrich(log)           # must not raise
+        assert log.ai_assessment is None, name
+        assert log.ai_error == "AI API unreachable or returned an error", name
+
+
+def test_ai_bad_replies_are_rejected() -> None:
+    """Not JSON / out-of-range values -> rejected after 3 tries; fenced JSON is accepted."""
+    cases = {
+        "not json": ("Sorry, I cannot help.", "AI response could not be parsed as JSON"),
+        "severity 9": (GOOD_AI_REPLY.replace('"severity": 4', '"severity": 9'),
+                       "AI response failed schema validation"),
+        "confidence 1.5": (GOOD_AI_REPLY.replace('0.9}', '1.5}'),
+                           "AI response failed schema validation"),
+    }
+    for name, (content, expected) in cases.items():
+        log = make_log(f"bad-{name}", "CT-114")
+        with patch.object(ai_module.requests, "post",
+                          return_value=fake_ai_response(ai_body(content))):
+            offline_client().enrich(log)
+        assert log.ai_error == expected, name
+
+    fenced = make_log("fenced", "CT-114")
+    with patch.object(ai_module.requests, "post",
+                      return_value=fake_ai_response(ai_body("```json\n" + GOOD_AI_REPLY + "\n```"))):
+        offline_client().enrich(fenced)
+    assert fenced.ai_assessment is not None
+
+
+def test_missing_api_key_skips_the_call() -> None:
+    log = make_log("no-key", "CT-114")
+    with patch.object(ai_module.requests, "post") as post:
+        AIClient("http://fake", "model", "").enrich(log)
+    post.assert_not_called()
+    assert log.ai_error == "AI_API_KEY is not configured"
+
+
+def test_corrupt_records_file_is_backed_up_not_lost() -> None:
+    """Bug fix (Part 2): a corrupt JSON file used to be silently overwritten."""
+    with tempfile.TemporaryDirectory() as folder:
+        path = os.path.join(folder, "records.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write('[{"log_id": "old-record"} THIS IS BROKEN')
+        repository = RecordRepository(path)
+        assert repository.load_all() == []
+        assert "corrupt" in repository.last_problem
+
+        assert repository.save(evaluated(urgent())) is True
+        backups = [name for name in os.listdir(folder) if ".corrupt-" in name]
+        assert len(backups) == 1                                  # old data kept
+        with open(os.path.join(folder, backups[0]), encoding="utf-8") as handle:
+            assert "old-record" in handle.read()
+        assert [log.log_id for log in repository.load_all()] == ["test-urgent"]
+        assert repository.last_problem is None
+
+
+def test_unreadable_records_file_does_not_crash() -> None:
+    """Bug fix (Part 2): a non-UTF-8 file or a folder path used to crash load_all()."""
+    with tempfile.TemporaryDirectory() as folder:
+        binary = os.path.join(folder, "binary.json")
+        with open(binary, "wb") as handle:
+            handle.write(b"\xff\xfe\x00 not text")
+        assert RecordRepository(binary).load_all() == []
+
+        as_folder = RecordRepository(folder)                      # path is a directory
+        assert as_folder.load_all() == []
+        assert as_folder.save(evaluated(urgent())) is False       # reported, not raised
+
+
+def test_pipeline_reports_corrupt_records_file() -> None:
+    """The user is told about a corrupt file instead of it failing silently."""
+    repository = MagicMock()
+    repository.load_all.return_value = []
+    repository.last_problem = "Records file is corrupt (JSONDecodeError)"
+    view = MagicMock()
+    make_pipeline(view=view, repository=repository).process_batch([], TEST_TIME)
+    assert "corrupt" in view.display_error.call_args.args[0]
+
+
+def test_log_file_bad_input() -> None:
+    """Missing file, bad lines and an all-bad file (Business Rule 4) never crash."""
+    reader = LogFileReader()
+    logs, problems = reader.read("this_file_does_not_exist.txt")
+    assert logs == [] and problems[0].startswith("File could not be opened")
+
+    with tempfile.TemporaryDirectory() as folder:
+        path = os.path.join(folder, "errors.txt")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("2026-09-16 21:30:05 | CT-114 | E102 | CT scanner | "
+                         "Coolant temperature exceeded 90C\n"
+                         "not | enough | fields\n"
+                         "yesterday | CT-114 | E102 | CT scanner | Bad timestamp line here\n"
+                         "2026-09-16 21:31:00 | ! | E102 | CT scanner | Bad machine id line\n")
+        logs, problems = reader.read(path)
+        assert len(logs) == 1 and len(problems) == 3
+
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("garbage\nmore garbage\n")
+        ui, pipeline = MagicMock(), MagicMock()
+        ui.prompt_file_path.return_value = path
+        app = TriageApp(ui=ui, reader=reader, pipeline=pipeline, repository=MagicMock(),
+                        analyzer=FleetAnalyzer(), report_manager=MagicMock())
+        app._handle_file_ingest()
+        ui.display_error.assert_called_once_with(LogFileReader.INVALID_FILE_MESSAGE)
+        pipeline.process_batch.assert_not_called()
+
+
 TESTS = (
     test_evaluate,
     test_invalid_assessment_is_rejected,
@@ -442,6 +609,15 @@ TESTS = (
     test_html_report,
     test_markdown_report,
     test_gui_notifier,
+    test_ai_api_down_retries_then_human_review,
+    test_ai_retry_then_success,
+    test_ai_wrong_shape_reply_does_not_crash,
+    test_ai_bad_replies_are_rejected,
+    test_missing_api_key_skips_the_call,
+    test_corrupt_records_file_is_backed_up_not_lost,
+    test_unreadable_records_file_does_not_crash,
+    test_pipeline_reports_corrupt_records_file,
+    test_log_file_bad_input,
 )
 
 
