@@ -12,10 +12,10 @@ from pprint import pformat
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import ai_manager_ai_client as ai_module
+import ai_manager.ai_manager_ai_client as ai_module
 import io_manager.io_manager_telegram_notifier as telegram_module
-from ai_manager_ai_client import AIClient
-from data_manager_record_repository import RecordRepository
+from ai_manager.ai_manager_ai_client import AIClient
+from data_manager.data_manager_record_repository import RecordRepository
 from io_manager.io_manager_console_ui import ConsoleUI
 from io_manager.io_manager_log_file_reader import LogFileReader
 from io_manager.io_manager_telegram_notifier import TelegramNotifier
@@ -27,8 +27,8 @@ from logic_manager.logic_manager_triage_engine import TriageEngine
 from io_manager.io_manager_html_report_formatter import HTMLReportFormatter
 from io_manager.io_manager_markdown_report_formatter import MarkdownReportFormatter
 from io_manager.io_manager_report_manager import ReportManager
-from main_triage_app import TriageApp
-from main_triage_pipeline import TriagePipeline
+from logic_manager.main_triage_app import TriageApp
+from logic_manager.main_triage_pipeline import TriagePipeline
 
 TEST_TIME = datetime(2026, 10, 9, 10, 43, 0)
 ENGINE = TriageEngine()

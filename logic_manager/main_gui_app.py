@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from typing import Callable, Optional
 
-from data_manager_record_repository import RecordRepository
+from data_manager.data_manager_record_repository import RecordRepository
 from io_manager.io_manager_gui_window import GuiWindow
 from io_manager.io_manager_log_file_reader import LogFileReader
 from io_manager.io_manager_report_manager import ReportManager

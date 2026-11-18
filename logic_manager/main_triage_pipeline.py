@@ -8,8 +8,8 @@ import threading
 from datetime import datetime
 from typing import Optional
 
-from ai_manager_ai_client import AIClient
-from data_manager_record_repository import RecordRepository
+from ai_manager.ai_manager_ai_client import AIClient
+from data_manager.data_manager_record_repository import RecordRepository
 from io_manager.io_manager_notifier import Notifier
 from io_manager.io_manager_output_view import OutputView
 from io_manager.io_manager_telegram_notifier import TelegramNotifier
