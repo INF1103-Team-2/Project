@@ -4,3 +4,4 @@ logs/
 reports/
 *.corrupt-*
 .vscode/
+processed_records.json
