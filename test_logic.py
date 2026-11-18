@@ -274,7 +274,7 @@ def test_background_dispatch_marks_reports_sent_without_cli_output() -> None:
     view = MagicMock()
     pipeline = make_pipeline(view=view, repository=repository, telegram=telegram)
 
-    with patch("main_triage_pipeline.datetime") as clock:
+    with patch("logic_manager.main_triage_pipeline.datetime") as clock:
         clock.now.return_value = datetime(2026, 10, 10, 7, 0)
         pipeline.dispatch_due_reports(show_message=False)
 
@@ -357,7 +357,7 @@ def test_bug_fix_text_confidence_is_rejected() -> None:
     assert client._validate(bad) is False
     log = make_log("bad-ai", "CT-114")
     with patch.object(client, "_call_api", return_value='{"severity": 3}'), \
-            patch("ai_manager_ai_client.time.sleep"):
+            patch("ai_manager.ai_manager_ai_client.time.sleep"):
         client.enrich(log)
     assert log.ai_assessment is None
     assert log.ai_error == "AI response failed schema validation"
