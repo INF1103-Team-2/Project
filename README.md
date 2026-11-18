@@ -33,8 +33,9 @@ with the path to the `Project` folder on your own computer:
 Set-Location "{path\to\your}\Project"
 ```
 
-The current folder should contain `Dockerfile`, `requirements.txt`, and
-`main.py`. All commands in this README assume PowerShell and that folder.
+The current folder should contain `Dockerfile`, `main.py`, and the `docs`
+folder (which contains `requirements.txt`). All commands in this README assume
+PowerShell and that folder.
 
 ### 1.2 Prepare the `.env` file
 
@@ -86,8 +87,11 @@ New-Item -ItemType Directory -Force .\data, .\logs, .\reports
 2. Install the libraries:
 
 ```powershell
-pip install -r requirements.txt
+python -m pip install -r docs\requirements.txt
 ```
+
+This installs the Python packages listed there (`requests` and
+`python-dotenv`). Tkinter is provided separately by the Python installer.
 
 If `python` or `pip` is not found, use `py` / `py -m pip` (Windows) or
 `python3` / `pip3` (macOS and Linux).
@@ -116,8 +120,13 @@ timestamp | machine_id | error_code | machine_type | error message
 2026-09-16 21:30:05 | CT-114 | E102 | CT scanner | Coolant temperature exceeded 90C
 ```
 
-Lines that do not match are skipped and listed on screen. If no line is
-valid, the app shows "Invalid log format. Upload aborted." (Business Rule 4).
+The bundled sample is `docs\sample_error_logs.txt`; enter that path when
+prompted, or provide a path to your own log file.
+
+Lines with invalid timestamps, machine IDs or error codes, too few fields, or
+messages that are too short are skipped and listed on screen. Unknown machine
+types are stored as `other`. If no line is valid, the app shows
+"Invalid log format. Upload aborted." (Business Rule 4).
 
 ### 2.3 Desktop window (GUI)
 
@@ -207,9 +216,9 @@ be deleted together with the container.
 `--rm` removes the container when it exits, while the mounted data, log and
 report files stay on your computer. Select **Exit** in the app menu to stop it.
 
-The GUI cannot run in Docker (a container has no screen). If you run
-`python main.py --gui` inside the container, the app prints a short message
-and stops.
+The provided Docker image is configured for the CLI and tests only: it does
+not install the Tk runtime or configure a connection to a host display. Run
+the GUI locally with `python main.py --gui`.
 
 ### 3.4 Run the offline tests in Docker
 
@@ -243,10 +252,10 @@ they would overwrite each other's saves.
 | Rule | Behaviour |
 |---|---|
 | 1. Immediate alert | High severity + patient-safety risk + confident AI → Telegram straight away |
-| 2. Non-urgent batching | Other alerts are queued and sent in one report after 07:00 |
+| 2. Non-urgent batching | Deferred alerts are grouped into a Telegram report at 07:00 on their scheduled day: 1 day for recurring faults, 2 days for the standard queue, or 5 days for scheduled maintenance |
 | 3. Repeat suppression | Same machine + same error code within 10 minutes → one notification |
 | 4. Invalid file | File without valid lines → "Invalid log format. Upload aborted." |
-| 5. Confidence threshold | AI confidence **below 70%** → pending human review, no automatic Telegram alert |
+| 5. Confidence threshold | AI confidence **below 70%** → pending human review, with no automatic triage alert; a review-request message is sent if Telegram is configured |
 
 ## 6. Project structure
 
@@ -262,15 +271,14 @@ One class per file, named `<manager>_<class>.py`.
 | logic_manager | `logic_manager_error_log.py`, `logic_manager_decision.py`, `logic_manager_assessment.py` (abstract), `logic_manager_ai_assessment.py`, `logic_manager_human_assessment.py`, `logic_manager_triage_engine.py`, `logic_manager_alert_scheduler.py`, `logic_manager_fleet_analyzer.py` |
 | data_manager | `data_manager_record_repository.py` |
 | Tests | `test_logic.py` |
-| UML | `uml/0_overview.png` to `uml/7_gui_feature.png`, with PlantUML sources (`.puml`) and the shared `style.iuml` |
-| Docs | `docs/screenshots/`, `docs/sample_report.html`, `docs/sample_report.md` |
+| Docs | `docs/requirements.txt`, `docs/sample_error_logs.txt`, `docs/demo_scenarios.txt`, `docs/Five_Demo_Scenarios.docx`, and project notes |
 
 ## 7. Troubleshooting
 
 | Problem | Fix |
 |---|---|
 | `No module named 'tkinter'` | See the end of section 2.3 |
-| `No module named 'dotenv'` or `'requests'` | `pip install -r requirements.txt` |
+| `No module named 'dotenv'` or `'requests'` | `python -m pip install -r docs\requirements.txt` |
 | `python` not found | Use `py` (Windows) or `python3` (macOS / Linux) |
 | Records seem to have disappeared | You started the app from another folder, or `.env` has no `DATA_FILE` line; see sections 1.2 and 2.3 |
 | Docker: cannot connect to the engine | Open Docker Desktop and wait until the engine is running |
