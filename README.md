@@ -1,6 +1,7 @@
 # Biomedical Equipment Error Log Triage
 
 INF1103 Team Project (Phase 2: Object-Oriented Programming) – Team **JSON Derulo** (INF1103-Team-2)
+i
 
 Hospital machines produce many error logs. This app reads them, asks an AI to
 assess each one (severity, patient-safety risk, likely cause), applies our
